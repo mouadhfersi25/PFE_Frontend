@@ -2,8 +2,8 @@ pipeline {
     agent any
 
     tools {
-        // Adapter le nom à celui configuré dans Jenkins : Manage Jenkins > Tools > NodeJS
-        nodejs 'NodeJS'
+        // Nom exact dans Jenkins : Manage Jenkins > Tools > NodeJS
+        nodejs 'Nodejs'
     }
 
     options {
