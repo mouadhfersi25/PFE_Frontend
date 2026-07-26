@@ -13,6 +13,9 @@ pipeline {
 
     environment {
         IMAGE = 'mouadhfersi/edugame-frontend'
+        CONTAINER_NAME = 'edugame-frontend'
+        // Port hote Jenkins -> port 80 nginx dans le conteneur
+        APP_PORT = '3000'
     }
 
     stages {
@@ -108,19 +111,28 @@ pipeline {
             }
         }
 
-        stage('Deploy Frontend Kubernetes') {
+        stage('Deploy') {
             environment {
                 TAG = "${env.BUILD_NUMBER}"
             }
             steps {
                 sh '''
                     set -eu
-                    # Remplace le tag image dans le manifeste puis applique
-                    sed "s|IMAGE_PLACEHOLDER|${IMAGE}:${TAG}|g" k8s/frontend-deployment.yaml > /tmp/frontend-deployment.yaml
-                    kubectl apply -f /tmp/frontend-deployment.yaml
-                    kubectl apply -f k8s/frontend-service.yaml
-                    kubectl rollout status deployment/edugame-frontend --timeout=180s
-                    echo "Deploy OK : ${IMAGE}:${TAG}"
+                    echo "Deploiement Docker de $IMAGE:$TAG"
+
+                    docker pull "$IMAGE:$TAG"
+
+                    docker stop "$CONTAINER_NAME" 2>/dev/null || true
+                    docker rm "$CONTAINER_NAME" 2>/dev/null || true
+
+                    docker run -d \
+                      --name "$CONTAINER_NAME" \
+                      --restart unless-stopped \
+                      -p "${APP_PORT}:80" \
+                      "$IMAGE:$TAG"
+
+                    echo "Conteneur demarre : $CONTAINER_NAME ($IMAGE:$TAG) sur le port $APP_PORT"
+                    docker ps --filter "name=$CONTAINER_NAME"
                 '''
             }
         }
