@@ -1,0 +1,19 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logicBg" x1="0" y1="0" x2="640" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B5CF6"/>
+      <stop offset="0.5" stop-color="#6366F1"/>
+      <stop offset="1" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="28" fill="url(#logicBg)"/>
+  <circle cx="96" cy="82" r="88" fill="white" fill-opacity="0.12"/>
+  <circle cx="564" cy="292" r="128" fill="white" fill-opacity="0.08"/>
+  <rect x="184" y="84" width="272" height="192" rx="20" fill="white" fill-opacity="0.14" stroke="white" stroke-opacity="0.3"/>
+  <rect x="220" y="120" width="60" height="60" rx="12" fill="white" fill-opacity="0.85"/>
+  <rect x="290" y="120" width="60" height="60" rx="12" fill="white" fill-opacity="0.55"/>
+  <rect x="360" y="120" width="60" height="60" rx="12" fill="white" fill-opacity="0.85"/>
+  <rect x="220" y="190" width="60" height="60" rx="12" fill="white" fill-opacity="0.55"/>
+  <rect x="290" y="190" width="60" height="60" rx="12" fill="white"/>
+  <rect x="360" y="190" width="60" height="60" rx="12" fill="white" fill-opacity="0.55"/>
+</svg>

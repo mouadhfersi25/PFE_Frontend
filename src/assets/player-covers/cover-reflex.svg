@@ -1,0 +1,21 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="reflexBg" x1="0" y1="0" x2="640" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14B8A6"/>
+      <stop offset="0.5" stop-color="#06B6D4"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" rx="28" fill="url(#reflexBg)"/>
+  <circle cx="96" cy="68" r="86" fill="white" fill-opacity="0.12"/>
+  <circle cx="564" cy="286" r="120" fill="white" fill-opacity="0.08"/>
+  <circle cx="320" cy="180" r="102" fill="white" fill-opacity="0.14"/>
+  <circle cx="320" cy="180" r="70" fill="white" fill-opacity="0.22"/>
+  <circle cx="320" cy="180" r="38" fill="white"/>
+  <path d="M320 84V56" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <path d="M320 304V276" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <path d="M416 180H444" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <path d="M196 180H168" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <path d="M388 112L408 92" stroke="white" stroke-width="8" stroke-linecap="round"/>
+  <path d="M252 248L232 268" stroke="white" stroke-width="8" stroke-linecap="round"/>
+</svg>

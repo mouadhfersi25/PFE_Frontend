@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 44" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="egf" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#a855f7"/>
+      <stop offset="1" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="40" height="40" rx="11" fill="url(#egf)"/>
+  <path d="M14 22h16M22 14v16" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="17.5" cy="17.5" r="2" fill="#fff"/>
+  <circle cx="26.5" cy="26.5" r="2" fill="#fff"/>
+  <text x="50" y="30" fill="#0f172a" font-family="system-ui,Segoe UI,sans-serif" font-size="20" font-weight="800">EduGame</text>
+  <text x="156" y="30" fill="#64748b" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700">AI</text>
+</svg>
