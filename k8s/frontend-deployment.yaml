@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edugame-frontend
+  labels:
+    app: edugame-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: edugame-frontend
+  template:
+    metadata:
+      labels:
+        app: edugame-frontend
+    spec:
+      containers:
+        - name: edugame-frontend
+          image: IMAGE_PLACEHOLDER
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
