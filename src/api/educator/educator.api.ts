@@ -16,6 +16,7 @@ import type {
   UpdateLogicPuzzleRequest,
   ReflexSettingsDTO,
   CreateOrUpdateReflexSettingsRequest,
+  ReclamationDTO,
 } from '../types/api.types';
 
 const educatorApi = {
@@ -26,6 +27,10 @@ const educatorApi = {
     api.put<GameDTO>(EDUCATOR_ENDPOINTS.GAME_BY_ID(id), data),
   submitGame: (id: number | string) =>
     api.patch<GameDTO>(EDUCATOR_ENDPOINTS.GAME_SUBMIT(id)),
+  requestReactivation: (id: number | string) =>
+    api.patch<GameDTO>(EDUCATOR_ENDPOINTS.GAME_REQUEST_REACTIVATION(id)),
+  cancelReactivationRequest: (id: number | string) =>
+    api.patch<GameDTO>(EDUCATOR_ENDPOINTS.GAME_CANCEL_REACTIVATION_REQUEST(id)),
   generateGameCover: (id: number | string) =>
     api.post<GameDTO>(EDUCATOR_ENDPOINTS.GAME_COVER_GENERATE(id)),
   generateGameCoverPreview: (data: {
@@ -96,6 +101,9 @@ const educatorApi = {
 
   getDashboardStats: () => api.get<EducatorDashboardStatsDTO>(EDUCATOR_ENDPOINTS.DASHBOARD_STATS),
   getLearningStats: () => api.get<EducatorLearningStatsDTO>(EDUCATOR_ENDPOINTS.LEARNING_STATS),
+
+  /** Signalements joueurs validés (statut TRAITE) concernant les jeux de l'éducateur connecté. */
+  getReclamations: () => api.get<ReclamationDTO[]>(EDUCATOR_ENDPOINTS.RECLAMATIONS),
 };
 
 export default educatorApi;

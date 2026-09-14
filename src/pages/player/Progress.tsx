@@ -37,10 +37,10 @@ export default function Progress() {
 
   const skillsData = useMemo(
     () => [
-      { skill: 'Math', value: overview?.skillMath ?? 0 },
-      { skill: 'Logic', value: overview?.skillLogic ?? 0 },
-      { skill: 'Memory', value: overview?.skillMemory ?? 0 },
-      { skill: 'Reflex', value: overview?.skillReflex ?? 0 },
+      { skill: 'Maths', value: overview?.skillMath ?? 0 },
+      { skill: 'Logique', value: overview?.skillLogic ?? 0 },
+      { skill: 'Mémoire', value: overview?.skillMemory ?? 0 },
+      { skill: 'Réflexe', value: overview?.skillReflex ?? 0 },
     ],
     [overview]
   );
@@ -92,7 +92,16 @@ export default function Progress() {
     );
   };
 
-  if (!playerProfile) return null;
+  if (!playerProfile) {
+    return (
+      <div className="min-h-screen bg-[#090f2b] text-white flex items-center justify-center">
+        <div className="text-center text-slate-300">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          Chargement…
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 relative overflow-x-hidden">
@@ -111,8 +120,8 @@ export default function Progress() {
               <ArrowLeft className="w-6 h-6 text-white" />
             </motion.button>
             <div>
-              <h1 className="text-2xl font-bold text-white">Progress & Analytics</h1>
-              <p className="text-sm text-slate-300">Track your improvement</p>
+              <h1 className="text-2xl font-bold text-white">Progression et analyses</h1>
+              <p className="text-sm text-slate-300">Suis tes progrès</p>
             </div>
           </div>
           <PlayerHeaderActions />
@@ -140,7 +149,7 @@ export default function Progress() {
                 <TrendingUp className="w-6 h-6 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-slate-300">Current Level</p>
+                <p className="text-sm text-slate-300">Niveau actuel</p>
                 <p className="text-2xl font-bold text-white">{currentLevel}</p>
               </div>
             </div>
@@ -157,7 +166,7 @@ export default function Progress() {
                 <Target className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-slate-300">Avg Success Rate</p>
+                <p className="text-sm text-slate-300">Taux de réussite moyen</p>
                 <p className="text-2xl font-bold text-white">{avgSuccessRate}%</p>
               </div>
             </div>
@@ -174,7 +183,7 @@ export default function Progress() {
                 <Award className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-slate-300">Total Sessions</p>
+                <p className="text-sm text-slate-300">Sessions totales</p>
                 <p className="text-2xl font-bold text-white">{totalSessions}</p>
               </div>
             </div>
@@ -191,7 +200,7 @@ export default function Progress() {
                 <Zap className="w-6 h-6 text-yellow-600" />
               </div>
               <div>
-                <p className="text-sm text-slate-300">Weekly Playtime</p>
+                <p className="text-sm text-slate-300">Temps de jeu (semaine)</p>
                 <p className="text-2xl font-bold text-white">{weeklyPlaytime}</p>
               </div>
             </div>
@@ -205,7 +214,7 @@ export default function Progress() {
           transition={{ delay: 0.4 }}
           className="bg-white/5 rounded-2xl p-6 border border-white/15 mb-8 backdrop-blur-xl"
         >
-          <h3 className="text-xl font-bold text-white mb-6">XP & Score Evolution</h3>
+          <h3 className="text-xl font-bold text-white mb-6">Évolution XP et score</h3>
           {progressData.length > 1 ? (
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={progressData}>
@@ -238,7 +247,7 @@ export default function Progress() {
                 </div>
               </div>
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                <p className="text-xs text-slate-300 mb-2">Chart de la semaine</p>
+                <p className="text-xs text-slate-300 mb-2">Graphique de la semaine</p>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart
                     data={[
@@ -280,7 +289,7 @@ export default function Progress() {
           transition={{ delay: 0.5 }}
           className="bg-white/5 rounded-2xl p-6 border border-white/15 mb-8 backdrop-blur-xl"
         >
-          <h3 className="text-xl font-bold text-white mb-6">Skills Analysis</h3>
+          <h3 className="text-xl font-bold text-white mb-6">Analyse des compétences</h3>
           <div className="space-y-4">
             {skillsData.map((skill) => (
               <div key={skill.skill} className="rounded-xl border border-white/10 bg-white/5 p-3">
@@ -306,7 +315,7 @@ export default function Progress() {
           transition={{ delay: 0.6 }}
           className="bg-white/5 rounded-2xl p-6 border border-white/15 backdrop-blur-xl"
         >
-          <h3 className="text-xl font-bold text-white mb-6">Performance by Game Type</h3>
+          <h3 className="text-xl font-bold text-white mb-6">Performance par type de jeu</h3>
           {performanceByGameType.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={performanceByGameType}>
@@ -315,13 +324,13 @@ export default function Progress() {
                 <YAxis stroke="#6b7280" />
                 <Tooltip
                   formatter={(value: number, key: string) => [value, key === 'avgScore' ? 'Score moyen' : 'Taux de réussite %']}
-                  labelFormatter={(label) => `Type: ${label}`}
+                  labelFormatter={(label) => `Type : ${label}`}
                   content={renderDarkTooltip}
                   cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
                 />
                 <Legend />
-                <Bar dataKey="avgScore" fill="#8b5cf6" name="Avg Score" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="successRate" fill="#3b82f6" name="Success Rate %" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="avgScore" fill="#8b5cf6" name="Score moyen" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="successRate" fill="#3b82f6" name="Taux de réussite %" radius={[8, 8, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -334,9 +343,9 @@ export default function Progress() {
               <div key={type.type} className="bg-white/5 rounded-xl p-4 border border-white/10">
                 <h4 className="font-bold text-white mb-2">{type.type}</h4>
                 <div className="space-y-1 text-sm">
-                  <p className="text-slate-300">Played: <span className="font-semibold text-white">{type.played}</span></p>
-                  <p className="text-slate-300">Avg Score: <span className="font-semibold text-white">{type.avgScore}</span></p>
-                  <p className="text-slate-300">Success: <span className="font-semibold text-white">{type.successRate}%</span></p>
+                  <p className="text-slate-300">Joué : <span className="font-semibold text-white">{type.played}</span></p>
+                  <p className="text-slate-300">Score moyen : <span className="font-semibold text-white">{type.avgScore}</span></p>
+                  <p className="text-slate-300">Réussite : <span className="font-semibold text-white">{type.successRate}%</span></p>
                 </div>
               </div>
             ))}

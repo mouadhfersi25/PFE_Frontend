@@ -7,7 +7,6 @@ import {
   Gift,
   BarChart3,
   TrendingUp,
-  Coins,
   Eye,
   MousePointerClick,
   Power,
@@ -16,20 +15,28 @@ import {
   LogOut,
   Loader2,
   X,
+  Search,
+  UserCircle,
+  User,
+  Mail,
+  Phone,
+  Lock,
+  Save,
 } from 'lucide-react';
 import { authService } from '@/services/auth.service';
 import sponsorApi from '@/api/sponsor';
-import type { SponsorPubliciteDTO, SponsorRecompenseDTO, SponsorRewardRequestDTO } from '@/api/types';
+import { userService } from '@/services/user.service';
+import type { GameDTO, SponsorPubliciteDTO, SponsorRecompenseDTO, SponsorRewardRequestDTO, UserDTO } from '@/api/types';
+import { validateRequired, validatePhone, validateMaxLength, validateMinLength, type ValidationResult } from '@/utils/formValidation';
 
 type CampaignStatus = 'ACTIVE' | 'PAUSED' | 'DRAFT';
 
 type SponsorCampaign = {
   id: number;
   title: string;
-  audience: string;
+  gamesLabel: string;
+  jeuIds: number[];
   status: CampaignStatus;
-  budgetSpent: number;
-  budgetTotal: number;
   impressions: number;
   clicks: number;
 };
@@ -45,83 +52,25 @@ type SponsorReward = {
 
 type RewardRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
-const initialCampaigns: SponsorCampaign[] = [
-  {
-    id: 1,
-    title: 'Back to School 2026',
-    audience: '7-12 ans',
-    status: 'ACTIVE',
-    budgetSpent: 1200,
-    budgetTotal: 2000,
-    impressions: 45200,
-    clicks: 2380,
-  },
-  {
-    id: 2,
-    title: 'Challenge Logique',
-    audience: '13-18 ans',
-    status: 'PAUSED',
-    budgetSpent: 820,
-    budgetTotal: 1600,
-    impressions: 23100,
-    clicks: 970,
-  },
-  {
-    id: 3,
-    title: 'Promo badges premium',
-    audience: 'Tous',
-    status: 'DRAFT',
-    budgetSpent: 0,
-    budgetTotal: 900,
-    impressions: 0,
-    clicks: 0,
-  },
-];
-
-const initialRewards: SponsorReward[] = [
-  {
-    id: 1,
-    name: 'Ticket Match Football',
-    description: 'Place tribune standard pour un match de championnat.',
-    rewardType: 'CADEAU',
-    pointsCost: 1500,
-    enabled: true,
-  },
-  {
-    id: 2,
-    name: 'Ticket Concert',
-    description: 'Billet standard pour concert partenaire.',
-    rewardType: 'CADEAU',
-    pointsCost: 2200,
-    enabled: true,
-  },
-  {
-    id: 3,
-    name: "Bon d'achat",
-    description: 'Bon d achat utilisable chez un partenaire retail.',
-    rewardType: 'BON_D_ACHAT',
-    pointsCost: 1000,
-    enabled: true,
-  },
-];
-
 type SponsorDashboardStatsDTO = {
+  totalCampaigns: number;
   activeCampaigns: number;
+  pausedCampaigns: number;
   totalImpressions: number;
   totalClicks: number;
-  ctr: number;
   distributedRewards: number;
   rewardStock: number;
+  pendingRewardRequests: number;
 };
 
 const statusBadge = (status: CampaignStatus) => {
-  if (status === 'ACTIVE') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-  if (status === 'PAUSED') return 'bg-amber-50 text-amber-700 border-amber-200';
-  return 'bg-slate-100 text-slate-700 border-slate-200';
+  if (status === 'ACTIVE') return 'bg-emerald-100/80 text-emerald-800 border-emerald-200';
+  if (status === 'PAUSED') return 'bg-amber-100/80 text-amber-900 border-amber-200';
+  return 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]';
 };
 
 const statusLabel = (status: CampaignStatus) => {
-  if (status === 'ACTIVE') return 'Active';
+  if (status === 'ACTIVE') return 'Actif';
   if (status === 'PAUSED') return 'En pause';
   return 'Brouillon';
 };
@@ -137,22 +86,26 @@ const rewardTypeOptions = Object.keys(rewardTypeLabels);
 
 export default function SponsorDashboard() {
   const navigate = useNavigate();
-  const [campaigns, setCampaigns] = useState<SponsorCampaign[]>(initialCampaigns);
-  const [rewards, setRewards] = useState<SponsorReward[]>(initialRewards);
+  const [campaigns, setCampaigns] = useState<SponsorCampaign[]>([]);
+  const [rewards, setRewards] = useState<SponsorReward[]>([]);
   const [apiStats, setApiStats] = useState<SponsorDashboardStatsDTO | null>(null);
-  const [activeSection, setActiveSection] = useState<'overview' | 'campaigns' | 'rewards' | 'analytics'>('overview');
+  const [activeSection, setActiveSection] = useState<'overview' | 'campaigns' | 'rewards' | 'analytics' | 'profile'>('overview');
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
   const [creatingCampaign, setCreatingCampaign] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [campaignError, setCampaignError] = useState<string | null>(null);
+  const [campaignActionLoadingId, setCampaignActionLoadingId] = useState<number | null>(null);
+  const [isCampaignsLoading, setIsCampaignsLoading] = useState(true);
   const [creatingReward, setCreatingReward] = useState(false);
   const [rewardError, setRewardError] = useState<string | null>(null);
   const [editingRewardId, setEditingRewardId] = useState<number | null>(null);
   const [rewardActionLoadingId, setRewardActionLoadingId] = useState<number | null>(null);
-  const [isRewardsLoading, setIsRewardsLoading] = useState(false);
+  const [isRewardsLoading, setIsRewardsLoading] = useState(true);
   const [rewardRequests, setRewardRequests] = useState<SponsorRewardRequestDTO[]>([]);
   const [rewardRequestActionLoadingId, setRewardRequestActionLoadingId] = useState<number | null>(null);
   const [selectedReward, setSelectedReward] = useState<SponsorReward | null>(null);
   const [isRewardModalOpen, setIsRewardModalOpen] = useState(false);
+  const [availableGames, setAvailableGames] = useState<GameDTO[]>([]);
   const [rewardForm, setRewardForm] = useState({
     nom: '',
     description: '',
@@ -164,38 +117,167 @@ export default function SponsorDashboard() {
     typePublicite: 'VIDEO',
     imageUrl: '',
     adDurationSeconds: '8',
-    budgetUtilise: '0',
     ctaLabel: 'Voir l offre',
     ctaUrl: '',
+    jeuIds: [] as number[],
   });
+  const [gameFilter, setGameFilter] = useState('');
+
+  const filteredAvailableGames = useMemo(() => {
+    const query = gameFilter.trim().toLowerCase();
+    if (!query) return availableGames;
+    return availableGames.filter((game) =>
+      game.titre.toLowerCase().includes(query) || game.typeJeu.toLowerCase().includes(query)
+    );
+  }, [availableGames, gameFilter]);
+
+  // --- Mon profil ---
+  const [profile, setProfile] = useState<UserDTO | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+  const [profileFormErrors, setProfileFormErrors] = useState<ValidationResult>({});
+  const [profileForm, setProfileForm] = useState({ nom: '', prenom: '', telephone: '' });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+
+  useEffect(() => {
+    if (activeSection !== 'profile' || profile) return;
+    let cancelled = false;
+    setProfileLoading(true);
+    userService
+      .getProfile()
+      .then((data) => {
+        if (cancelled) return;
+        const d = data as UserDTO;
+        setProfile(d);
+        setProfileForm({ nom: d.nom ?? '', prenom: d.prenom ?? '', telephone: d.telephone ?? '' });
+      })
+      .catch((err: any) => {
+        if (!cancelled) setProfileError(err?.response?.data?.message || err?.message || 'Erreur chargement profil');
+      })
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [activeSection, profile]);
+
+  const validateProfileForm = (): boolean => {
+    const next: ValidationResult = {};
+    const prenomErr = validateRequired(profileForm.prenom, 'Le prénom est requis')
+      ?? validateMaxLength(profileForm.prenom, 100, 'Maximum 100 caractères');
+    if (prenomErr) next.prenom = prenomErr;
+    const nomErr = validateRequired(profileForm.nom, 'Le nom est requis')
+      ?? validateMaxLength(profileForm.nom, 100, 'Maximum 100 caractères');
+    if (nomErr) next.nom = nomErr;
+    const telephoneErr = validateRequired(profileForm.telephone, 'Le téléphone est requis')
+      ?? validatePhone(profileForm.telephone, 'Le téléphone doit contenir 8 chiffres');
+    if (telephoneErr) next.telephone = telephoneErr;
+    setProfileFormErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSaveProfile = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!validateProfileForm()) return;
+    setProfileSaving(true);
+    setProfileError(null);
+    setProfileSuccess(null);
+    try {
+      await userService.updateProfile({
+        nom: profileForm.nom || undefined,
+        prenom: profileForm.prenom || undefined,
+        telephone: profileForm.telephone || undefined,
+      });
+      setProfileSuccess('Profil mis à jour avec succès.');
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.message || err?.message || 'Erreur lors de la mise à jour du profil');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleChangeSponsorPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    setProfileError(null);
+    setProfileSuccess(null);
+    const pwdErrors: ValidationResult = {};
+    const currentErr = validateRequired(passwordForm.currentPassword, 'Mot de passe actuel requis');
+    if (currentErr) pwdErrors.currentPassword = currentErr;
+    const newErr = validateRequired(passwordForm.newPassword, 'Nouveau mot de passe requis')
+      ?? validateMinLength(passwordForm.newPassword, 6, 'Minimum 6 caractères');
+    if (newErr) pwdErrors.newPassword = newErr;
+    if (passwordForm.confirmPassword !== passwordForm.newPassword) {
+      pwdErrors.confirmPassword = 'La confirmation ne correspond pas au nouveau mot de passe';
+    }
+    setProfileFormErrors((prev) => ({ ...prev, ...pwdErrors }));
+    if (Object.keys(pwdErrors).length > 0) return;
+
+    setProfileSaving(true);
+    try {
+      await userService.changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setProfileSuccess('Mot de passe modifié avec succès.');
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.message || err?.message || 'Erreur lors du changement du mot de passe');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const mapPublicitesToCampaigns = (rows: SponsorPubliciteDTO[]) => {
     return rows.map((item) => {
-      const budgetSpent = item.budgetUtilise ?? 0;
-      const budgetTotal = budgetSpent > 0 ? Math.round(budgetSpent * 1.25) : 100;
       const rawStatus = (item.status ?? '').toUpperCase();
+      const titres = (item.jeuTitres ?? []).filter(Boolean);
       return {
         id: item.id,
         title: item.contenu,
-        audience: 'Tous',
+        gamesLabel: titres.length > 0 ? titres.join(', ') : 'Aucun jeu',
+        jeuIds: item.jeuIds ?? [],
         status: rawStatus === 'ACTIVE' ? 'ACTIVE' : rawStatus === 'PAUSED' ? 'PAUSED' : 'DRAFT',
-        budgetSpent,
-        budgetTotal,
         impressions: item.nbVues ?? 0,
         clicks: item.nbClics ?? 0,
       } satisfies SponsorCampaign;
     });
   };
 
+  const loadDashboardStats = () => {
+    sponsorApi.getDashboardStats()
+      .then((res) => {
+        const data = res.data as Partial<SponsorDashboardStatsDTO>;
+        setApiStats({
+          totalCampaigns: data.totalCampaigns ?? 0,
+          activeCampaigns: data.activeCampaigns ?? 0,
+          pausedCampaigns: data.pausedCampaigns ?? 0,
+          totalImpressions: data.totalImpressions ?? 0,
+          totalClicks: data.totalClicks ?? 0,
+          distributedRewards: data.distributedRewards ?? 0,
+          rewardStock: data.rewardStock ?? 0,
+          pendingRewardRequests: data.pendingRewardRequests ?? 0,
+        });
+      })
+      .catch(() => {
+        setApiStats(null);
+      });
+  };
+
   const loadCampaigns = () => {
+    setIsCampaignsLoading(true);
+    setCampaignError(null);
     sponsorApi.listPublicites()
       .then((res) => {
         const rows = Array.isArray(res.data) ? (res.data as SponsorPubliciteDTO[]) : [];
-        if (rows.length === 0) return;
         setCampaigns(mapPublicitesToCampaigns(rows));
       })
       .catch(() => {
-        setCampaigns(initialCampaigns);
+        setCampaigns([]);
+        setCampaignError('Impossible de charger les publicités depuis le serveur.');
+      })
+      .finally(() => {
+        setIsCampaignsLoading(false);
       });
   };
 
@@ -224,9 +306,11 @@ export default function SponsorDashboard() {
       .then((res) => {
         const rows = Array.isArray(res.data) ? (res.data as SponsorRecompenseDTO[]) : [];
         setRewards(mapRecompensesToRewards(rows));
+        setRewardError(null);
       })
       .catch(() => {
-        setRewards(initialRewards);
+        setRewards([]);
+        setRewardError('Impossible de charger les récompenses depuis le serveur.');
       })
       .finally(() => {
         setIsRewardsLoading(false);
@@ -247,17 +331,22 @@ export default function SponsorDashboard() {
   useEffect(() => {
     let cancelled = false;
 
+    setIsCampaignsLoading(true);
+    setIsRewardsLoading(true);
+
     sponsorApi.getDashboardStats()
       .then((res) => {
         if (cancelled) return;
         const data = res.data as Partial<SponsorDashboardStatsDTO>;
         setApiStats({
+          totalCampaigns: data.totalCampaigns ?? 0,
           activeCampaigns: data.activeCampaigns ?? 0,
+          pausedCampaigns: data.pausedCampaigns ?? 0,
           totalImpressions: data.totalImpressions ?? 0,
           totalClicks: data.totalClicks ?? 0,
-          ctr: data.ctr ?? 0,
           distributedRewards: data.distributedRewards ?? 0,
           rewardStock: data.rewardStock ?? 0,
+          pendingRewardRequests: data.pendingRewardRequests ?? 0,
         });
       })
       .catch(() => {
@@ -268,11 +357,17 @@ export default function SponsorDashboard() {
       .then((res) => {
         if (cancelled) return;
         const rows = Array.isArray(res.data) ? (res.data as SponsorPubliciteDTO[]) : [];
-        if (rows.length === 0) return;
         setCampaigns(mapPublicitesToCampaigns(rows));
+        setCampaignError(null);
       })
       .catch(() => {
-        if (!cancelled) setCampaigns(initialCampaigns);
+        if (!cancelled) {
+          setCampaigns([]);
+          setCampaignError('Impossible de charger les publicités depuis le serveur.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsCampaignsLoading(false);
       });
 
     sponsorApi.listRecompenses()
@@ -282,7 +377,13 @@ export default function SponsorDashboard() {
         setRewards(mapRecompensesToRewards(rows));
       })
       .catch(() => {
-        if (!cancelled) setRewards(initialRewards);
+        if (!cancelled) {
+          setRewards([]);
+          setRewardError('Impossible de charger les récompenses depuis le serveur.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsRewardsLoading(false);
       });
 
     sponsorApi.listRewardRequests()
@@ -295,49 +396,97 @@ export default function SponsorDashboard() {
         if (!cancelled) setRewardRequests([]);
       });
 
+    sponsorApi.listJeux()
+      .then((res) => {
+        if (cancelled) return;
+        setAvailableGames(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableGames([]);
+      });
+
     return () => {
       cancelled = true;
     };
   }, []);
 
   const computedStats = useMemo(() => {
+    const totalCampaigns = campaigns.length;
     const activeCampaigns = campaigns.filter((c) => c.status === 'ACTIVE').length;
+    const pausedCampaigns = campaigns.filter((c) => c.status !== 'ACTIVE').length;
     const totalImpressions = campaigns.reduce((sum, c) => sum + c.impressions, 0);
     const totalClicks = campaigns.reduce((sum, c) => sum + c.clicks, 0);
-    const ctr = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100) : 0;
-    const distributedRewards = 0;
-    const rewardStock = rewards.length;
+    const distributedRewards = rewardRequests.filter(
+      (request) => (request.status ?? '').toUpperCase() === 'APPROVED'
+    ).length;
+    const pendingRewardRequests = rewardRequests.filter(
+      (request) => (request.status ?? '').toUpperCase() === 'PENDING'
+    ).length;
+    const rewardStock = rewards.filter((reward) => reward.enabled).length;
 
     return {
+      totalCampaigns,
       activeCampaigns,
+      pausedCampaigns,
       totalImpressions,
       totalClicks,
-      ctr,
       distributedRewards,
       rewardStock,
+      pendingRewardRequests,
     };
-  }, [campaigns, rewards]);
+  }, [campaigns, rewards, rewardRequests]);
 
-  const stats = apiStats ?? computedStats;
+  const stats = useMemo(() => {
+    if (!isCampaignsLoading || campaigns.length > 0) {
+      return computedStats;
+    }
+    if (apiStats != null) {
+      return apiStats;
+    }
+    return computedStats;
+  }, [apiStats, campaigns.length, computedStats, isCampaignsLoading]);
+
+  const campaignPerformance = useMemo(() => {
+    return [...campaigns]
+      .map((campaign) => ({ ...campaign }))
+      .sort((a, b) => {
+        if (b.impressions !== a.impressions) return b.impressions - a.impressions;
+        return b.clicks - a.clicks;
+      });
+  }, [campaigns]);
+
+  const topCampaign = campaignPerformance[0] ?? null;
+  const maxImpressions = Math.max(1, ...campaignPerformance.map((c) => c.impressions));
+  const maxClicks = Math.max(1, ...campaignPerformance.map((c) => c.clicks));
+
+  const refreshAnalytics = () => {
+    loadCampaigns();
+    loadDashboardStats();
+    loadRewards();
+    loadRewardRequests();
+  };
 
   const handleLogout = () => {
     authService.logout();
     navigate('/login');
   };
 
-  const toggleCampaignStatus = (campaignId: number) => {
-    setCampaigns((prev) => {
-      const current = prev.find((c) => c.id === campaignId);
-      if (!current) return prev;
-      const nextActive = current.status !== 'ACTIVE';
-      sponsorApi.setPubliciteStatus(campaignId, nextActive).catch(() => {
-        // Keep optimistic UI behavior even if provider fails temporarily.
-      });
-      return prev.map((campaign) => {
-        if (campaign.id !== campaignId) return campaign;
-        return { ...campaign, status: nextActive ? 'ACTIVE' : 'PAUSED' };
-      });
-    });
+  const toggleCampaignStatus = async (campaignId: number) => {
+    const current = campaigns.find((c) => c.id === campaignId);
+    if (!current) return;
+    const nextActive = current.status !== 'ACTIVE';
+    setCampaignActionLoadingId(campaignId);
+    setCampaignError(null);
+    try {
+      const response = await sponsorApi.setPubliciteStatus(campaignId, nextActive);
+      const updated = mapPublicitesToCampaigns([response.data as SponsorPubliciteDTO])[0];
+      setCampaigns((prev) => prev.map((campaign) => (campaign.id === campaignId ? updated : campaign)));
+      loadDashboardStats();
+    } catch {
+      setCampaignError('Impossible de changer le statut de cette publicité.');
+    } finally {
+      setCampaignActionLoadingId(null);
+    }
   };
 
   const toggleReward = async (rewardId: number) => {
@@ -352,6 +501,7 @@ export default function SponsorDashboard() {
       if (selectedReward?.id === rewardId) {
         setSelectedReward(updated);
       }
+      loadDashboardStats();
     } catch {
       setRewardError('Impossible de changer le statut pour cette récompense.');
     } finally {
@@ -388,6 +538,7 @@ export default function SponsorDashboard() {
         setSelectedReward(null);
         setIsRewardModalOpen(false);
       }
+      loadDashboardStats();
     } catch {
       setRewardError("Suppression échouée. Réessayez dans quelques instants.");
     } finally {
@@ -429,6 +580,7 @@ export default function SponsorDashboard() {
       const response = await sponsorApi.updateRewardRequestStatus(requestId, status);
       const updated = response.data as SponsorRewardRequestDTO;
       setRewardRequests((prev) => prev.map((item) => (item.id === requestId ? updated : item)));
+      loadDashboardStats();
     } catch {
       setRewardError('Impossible de mettre à jour le statut de la demande.');
     } finally {
@@ -471,6 +623,7 @@ export default function SponsorDashboard() {
         setRewards((prev) => [created, ...prev]);
       }
       loadRewards();
+      loadDashboardStats();
       setEditingRewardId(null);
       resetRewardForm();
     } catch (error: unknown) {
@@ -494,13 +647,8 @@ export default function SponsorDashboard() {
   const handleCreateCampaign = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const contenu = createForm.contenu.trim();
-    const budget = Number.parseFloat(createForm.budgetUtilise);
     if (!contenu) {
       setCreateError('Le contenu est obligatoire.');
-      return;
-    }
-    if (Number.isNaN(budget) || budget < 0) {
-      setCreateError('Le budget doit être un nombre positif.');
       return;
     }
     if (!createForm.ctaUrl.trim()) {
@@ -515,6 +663,10 @@ export default function SponsorDashboard() {
       setCreateError('L URL video doit pointer vers un fichier .mp4, .webm ou .ogg.');
       return;
     }
+    if (createForm.jeuIds.length === 0) {
+      setCreateError('Sélectionnez au moins un jeu cible pour cette publicité.');
+      return;
+    }
     const adDuration = Number.parseInt(createForm.adDurationSeconds, 10);
     if (Number.isNaN(adDuration) || adDuration < 3 || adDuration > 60) {
       setCreateError('La duree pub doit etre entre 3 et 60 secondes.');
@@ -527,25 +679,35 @@ export default function SponsorDashboard() {
       await sponsorApi.createPublicite({
         contenu,
         typePublicite: 'VIDEO',
+        videoUrl: createForm.imageUrl.trim(),
         imageUrl: createForm.imageUrl.trim(),
         adDurationSeconds: adDuration,
-        budgetUtilise: budget,
         ctaLabel: createForm.ctaLabel.trim(),
         ctaUrl: createForm.ctaUrl.trim(),
+        jeuIds: createForm.jeuIds,
       });
       setCreateForm({
         contenu: '',
         typePublicite: 'VIDEO',
         imageUrl: '',
         adDurationSeconds: '8',
-        budgetUtilise: '0',
         ctaLabel: 'Voir l offre',
         ctaUrl: '',
+        jeuIds: [],
       });
       setIsCreateFormOpen(false);
       loadCampaigns();
-    } catch {
-      setCreateError('Création échouée. Vérifiez la configuration du provider externe.');
+      loadDashboardStats();
+    } catch (error: unknown) {
+      const responseMessage = (
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: { data?: { message?: unknown } } }).response?.data?.message === 'string'
+      )
+        ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+        : null;
+      setCreateError(responseMessage || 'Création échouée. Vérifiez les données et réessayez.');
     } finally {
       setCreatingCampaign(false);
     }
@@ -556,45 +718,75 @@ export default function SponsorDashboard() {
     { id: 'campaigns' as const, label: 'Publicités', icon: Megaphone },
     { id: 'rewards' as const, label: 'Récompenses', icon: Gift },
     { id: 'analytics' as const, label: 'Statistiques', icon: BarChart3 },
+    { id: 'profile' as const, label: 'Mon profil', icon: UserCircle },
+  ];
+
+  const sectionTitle = sections.find((s) => s.id === activeSection)?.label ?? 'Tableau de bord';
+
+  const kpiItems = [
+    {
+      label: 'Campagnes actives',
+      value: String(stats.activeCampaigns),
+      hint: `${stats.totalCampaigns} au total · ${stats.pausedCampaigns} en pause`,
+      icon: Megaphone,
+    },
+    {
+      label: 'Impressions',
+      value: stats.totalImpressions.toLocaleString(),
+      hint: 'Vues en session de jeu',
+      icon: Eye,
+    },
+    {
+      label: 'Clics',
+      value: stats.totalClicks.toLocaleString(),
+      hint: 'Clics sur Voir l’offre',
+      icon: MousePointerClick,
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
+    <div className="sponsor-shell min-h-screen">
       <div className="min-h-screen flex">
-        <aside className="hidden lg:flex w-72 border-r border-slate-200 bg-white flex-col">
-          <div className="px-6 py-6 border-b border-slate-100">
+        <aside className="sponsor-aside hidden lg:flex sticky top-0 h-screen overflow-y-auto w-[280px] flex-col text-white shrink-0">
+          <div className="px-6 py-7 border-b border-white/10">
             <div className="flex items-center gap-3">
-              <img src="/logo-edugame.png" alt="" className="h-10 w-10 shrink-0 rounded-xl object-contain" />
+              <div className="rounded-2xl bg-white/10 p-1.5 ring-1 ring-white/15">
+                <img src="/logo-edugame.png" alt="" className="h-10 w-10 shrink-0 rounded-xl object-contain" />
+              </div>
               <div>
-                <p className="text-base font-bold text-slate-900">EduGame AI</p>
-                <p className="text-xs text-slate-500">Portail Sponsor</p>
+                <p className="sponsor-display text-xl font-bold text-white">EduGame</p>
+                <p className="text-[11px] uppercase tracking-[0.16em] text-[#bae6fd]">Portail Sponsor</p>
               </div>
             </div>
           </div>
 
-          <nav className="p-4 space-y-1">
+          <nav className="p-4 space-y-1.5">
             {sections.map((section) => (
               <button
                 key={section.id}
                 type="button"
                 onClick={() => setActiveSection(section.id)}
-                className={`w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
+                className={`sponsor-nav-btn w-full flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-semibold ${
                   activeSection === section.id
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-700 hover:bg-slate-100'
+                    ? 'is-active'
+                    : 'text-white/70 hover:bg-white/8 hover:text-white'
                 }`}
               >
-                <section.icon className="h-4 w-4" />
+                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${
+                  activeSection === section.id ? 'bg-[#0ea5e9]/25 text-[#e0f2fe]' : 'bg-white/8 text-white/80'
+                }`}>
+                  <section.icon className="h-4 w-4" />
+                </span>
                 {section.label}
               </button>
             ))}
           </nav>
 
-          <div className="mt-auto p-4 border-t border-slate-100">
+          <div className="mt-auto p-4 border-t border-white/10">
             <button
               type="button"
               onClick={handleLogout}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-rose-300/30 bg-rose-500/15 px-3 py-2.5 text-sm font-semibold text-rose-100 hover:bg-rose-500/25 transition-colors"
             >
               <LogOut className="h-4 w-4" />
               Déconnexion
@@ -602,24 +794,24 @@ export default function SponsorDashboard() {
           </div>
         </aside>
 
-        <main className="flex-1">
-          <header className="border-b border-slate-200 bg-white">
-            <div className="px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <img
-                  src="/logo-edugame.png"
-                  alt="EduGame"
-                  className="hidden h-7 max-h-7 w-auto max-w-[180px] shrink-0 object-contain object-left sm:block"
-                />
-                <div className="min-w-0">
-                  <h1 className="text-2xl font-extrabold text-slate-900">Dashboard Sponsor</h1>
-                  <p className="text-sm text-slate-500">Espace professionnel de gestion publicitaire et récompenses</p>
-                </div>
+        <main className="flex-1 min-w-0">
+          <header className="sticky top-0 z-20 border-b border-[rgba(12,46,43,0.08)] bg-[rgba(250,248,244,0.82)] backdrop-blur-xl">
+            <div className="px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#2563eb]/80">
+                  Espace professionnel
+                </p>
+                <h1 className="sponsor-display mt-1 text-3xl font-extrabold text-[#0f172a] truncate">
+                  {sectionTitle}
+                </h1>
+                <p className="mt-1 text-sm text-[#64748b]">
+                  Publicités vidéo, récompenses et performance en un seul endroit.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={handleLogout}
-                className="lg:hidden inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
+                className="lg:hidden inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700"
               >
                 <LogOut className="h-4 w-4" />
                 Déconnexion
@@ -631,10 +823,10 @@ export default function SponsorDashboard() {
                   key={section.id}
                   type="button"
                   onClick={() => setActiveSection(section.id)}
-                  className={`inline-flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold ${
+                  className={`inline-flex items-center gap-2 whitespace-nowrap rounded-2xl px-3.5 py-2 text-sm font-semibold transition-colors ${
                     activeSection === section.id
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700'
+                      ? 'bg-[#0f172a] text-white'
+                      : 'bg-white/70 text-[#0f172a] border border-[rgba(37,99,235,0.14)]'
                   }`}
                 >
                   <section.icon className="h-4 w-4" />
@@ -645,222 +837,380 @@ export default function SponsorDashboard() {
           </header>
 
           <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-            <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs text-slate-500 mb-1">Campagnes actives</p>
-                <p className="text-2xl font-black text-slate-900">{stats.activeCampaigns}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs text-slate-500 mb-1">Impressions total</p>
-                <p className="text-2xl font-black text-slate-900">{stats.totalImpressions.toLocaleString()}</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs text-slate-500 mb-1">CTR moyen</p>
-                <p className="text-2xl font-black text-slate-900">{stats.ctr.toFixed(2)}%</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs text-slate-500 mb-1">Stock récompenses</p>
-                <p className="text-2xl font-black text-slate-900">{stats.rewardStock}</p>
-              </div>
-            </section>
-
-            {activeSection === 'overview' && (
-              <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <h2 className="text-lg font-bold text-slate-900 mb-4 inline-flex items-center gap-2">
-                    <Megaphone className="h-5 w-5 text-slate-700" />
-                    Publicités en cours
-                  </h2>
-                  <div className="space-y-3">
-                    {campaigns.map((campaign) => (
-                      <div key={campaign.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold text-slate-900">{campaign.title}</p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${statusBadge(campaign.status)}`}>
-                            {statusLabel(campaign.status)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">{campaign.impressions.toLocaleString()} impressions</p>
+            {(activeSection === 'overview' || activeSection === 'analytics') && (
+              <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {kpiItems.map((item, index) => (
+                  <motion.div
+                    key={item.label}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05, duration: 0.28 }}
+                    className="sponsor-kpi rounded-3xl p-4 pl-5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium text-[#64748b] mb-1">{item.label}</p>
+                        <p className="sponsor-display text-3xl font-extrabold text-[#0f172a]">{item.value}</p>
+                        <p className="mt-1.5 text-[11px] text-[#94a3b8]">{item.hint}</p>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                  <h2 className="text-lg font-bold text-slate-900 mb-4 inline-flex items-center gap-2">
-                    <Gift className="h-5 w-5 text-slate-700" />
-                    Récompenses sponsorisées
-                  </h2>
-                  <div className="space-y-3">
-                    {rewards.map((reward) => (
-                      <div key={reward.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="flex items-center justify-between">
-                          <p className="font-semibold text-slate-900">{reward.name}</p>
-                          <span className={`text-xs px-2 py-0.5 rounded-full border ${reward.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                            {reward.enabled ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500">{reward.pointsCost} pts • Type {rewardTypeLabels[reward.rewardType] ?? reward.rewardType}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                      <span className="sponsor-kpi-icon inline-flex h-10 w-10 items-center justify-center rounded-2xl">
+                        <item.icon className="h-4.5 w-4.5 h-4 w-4" />
+                      </span>
+                    </div>
+                  </motion.div>
+                ))}
               </section>
             )}
 
+            {activeSection === 'overview' && (
+              <motion.section
+                key="overview"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="grid grid-cols-1 xl:grid-cols-2 gap-6"
+              >
+                <div className="sponsor-panel rounded-3xl p-6">
+                  <h2 className="sponsor-display text-2xl font-bold text-[#0f172a] mb-4 inline-flex items-center gap-2">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#dbeafe] text-[#2563eb]">
+                      <Megaphone className="h-4 w-4" />
+                    </span>
+                    Publicités en cours
+                  </h2>
+                  <div className="space-y-3">
+                    {isCampaignsLoading ? (
+                      <p className="text-sm text-[#64748b] inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Chargement des publicités...
+                      </p>
+                    ) : campaigns.length === 0 ? (
+                      <p className="text-sm text-[#64748b]">Aucune publicité pour le moment.</p>
+                    ) : (
+                      campaigns.map((campaign) => (
+                      <div key={campaign.id} className="sponsor-soft-item rounded-2xl p-3.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold text-[#0f172a]">{campaign.title}</p>
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full border ${statusBadge(campaign.status)}`}>
+                            {statusLabel(campaign.status)}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-[#64748b]">
+                          {campaign.impressions.toLocaleString()} vues · {campaign.clicks.toLocaleString()} clics
+                        </p>
+                        <p className="mt-1 text-xs text-[#94a3b8]">Jeux: {campaign.gamesLabel}</p>
+                      </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="sponsor-panel rounded-3xl p-6">
+                  <h2 className="sponsor-display text-2xl font-bold text-[#0f172a] mb-4 inline-flex items-center gap-2">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e0f2fe] text-[#0ea5e9]">
+                      <Gift className="h-4 w-4" />
+                    </span>
+                    Récompenses sponsorisées
+                  </h2>
+                  <div className="mb-3 grid grid-cols-2 gap-2">
+                    <div className="sponsor-soft-item rounded-2xl px-3 py-2.5">
+                      <p className="text-[11px] text-[#64748b]">Actives</p>
+                      <p className="sponsor-display text-xl font-bold text-[#0f172a]">{stats.rewardStock}</p>
+                    </div>
+                    <div className="sponsor-soft-item rounded-2xl px-3 py-2.5">
+                      <p className="text-[11px] text-[#64748b]">Demandes en attente</p>
+                      <p className="sponsor-display text-xl font-bold text-[#0f172a]">{stats.pendingRewardRequests}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {isRewardsLoading ? (
+                      <p className="text-sm text-[#64748b] inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Chargement des récompenses...
+                      </p>
+                    ) : rewards.length === 0 ? (
+                      <p className="text-sm text-[#64748b]">Aucune récompense pour le moment.</p>
+                    ) : (
+                      rewards.map((reward) => (
+                      <div key={reward.id} className="sponsor-soft-item rounded-2xl p-3.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-semibold text-[#0f172a]">{reward.name}</p>
+                          <span className={`text-xs px-2.5 py-0.5 rounded-full border ${reward.enabled ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200' : 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]'}`}>
+                            {reward.enabled ? 'Actif' : 'Inactif'}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-[#64748b]">{reward.pointsCost} pts • Type {rewardTypeLabels[reward.rewardType] ?? reward.rewardType}</p>
+                      </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </motion.section>
+            )}
+
             {activeSection === 'campaigns' && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                  <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2">
-                    <Megaphone className="h-5 w-5 text-slate-700" />
+              <motion.section
+                key="campaigns"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="sponsor-panel rounded-3xl p-6"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                  <h2 className="sponsor-display text-2xl font-bold text-[#0f172a] inline-flex items-center gap-2">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#dbeafe] text-[#2563eb]">
+                      <Megaphone className="h-4 w-4" />
+                    </span>
                     Gestion des publicités
                   </h2>
                   <button
                     type="button"
                     onClick={() => setIsCreateFormOpen((prev) => !prev)}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 transition-colors"
+                    className="sponsor-primary-btn inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold"
                   >
                     {isCreateFormOpen ? 'Fermer le formulaire' : 'Ajouter une pub'}
                   </button>
                 </div>
 
                 {isCreateFormOpen && (
-                  <form onSubmit={handleCreateCampaign} className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <form onSubmit={handleCreateCampaign} className="mb-5 sponsor-soft-item rounded-2xl p-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Contenu</label>
+                        <label htmlFor="ad-contenu" className="block text-xs font-semibold text-[#64748b] mb-1">Contenu</label>
                         <input
+                          id="ad-contenu"
                           type="text"
                           value={createForm.contenu}
                           onChange={(e) => setCreateForm((prev) => ({ ...prev, contenu: e.target.value }))}
                           placeholder="Ex: Promo rentrée -10%"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Type</label>
+                        <label htmlFor="ad-type" className="block text-xs font-semibold text-[#64748b] mb-1">Type</label>
                         <input
+                          id="ad-type"
                           value="VIDEO"
                           disabled
-                          className="w-full rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700"
+                          className="w-full rounded-xl border border-[rgba(37,99,235,0.14)] bg-[#f1f5f9] px-3 py-2.5 text-sm text-[#475569]"
                         />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">URL video (mp4/webm/ogg)</label>
+                        <label htmlFor="ad-videoUrl" className="block text-xs font-semibold text-[#64748b] mb-1">URL video (mp4/webm/ogg)</label>
                         <input
+                          id="ad-videoUrl"
                           type="url"
                           value={createForm.imageUrl}
                           onChange={(e) => setCreateForm((prev) => ({ ...prev, imageUrl: e.target.value }))}
                           placeholder="https://exemple.com/annonce.mp4"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Duree pub (sec)</label>
+                        <label htmlFor="ad-duration" className="block text-xs font-semibold text-[#64748b] mb-1">Duree pub (sec)</label>
                         <input
+                          id="ad-duration"
                           type="number"
                           min={3}
                           max={60}
                           value={createForm.adDurationSeconds}
                           onChange={(e) => setCreateForm((prev) => ({ ...prev, adDurationSeconds: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Label bouton</label>
+                        <label htmlFor="ad-ctaLabel" className="block text-xs font-semibold text-[#64748b] mb-1">Label bouton</label>
                         <input
+                          id="ad-ctaLabel"
                           type="text"
                           value={createForm.ctaLabel}
                           onChange={(e) => setCreateForm((prev) => ({ ...prev, ctaLabel: e.target.value }))}
                           placeholder="Ex: Voir l offre"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Budget utilisé</label>
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          value={createForm.budgetUtilise}
-                          onChange={(e) => setCreateForm((prev) => ({ ...prev, budgetUtilise: e.target.value }))}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                         />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">URL de l offre (obligatoire pour clic)</label>
+                        <label htmlFor="ad-ctaUrl" className="block text-xs font-semibold text-[#64748b] mb-1">URL de l offre (obligatoire pour clic)</label>
                         <input
+                          id="ad-ctaUrl"
                           type="url"
                           value={createForm.ctaUrl}
                           onChange={(e) => setCreateForm((prev) => ({ ...prev, ctaUrl: e.target.value }))}
                           placeholder="https://exemple.com/offre"
-                          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                         />
+                      </div>
+                      <div className="md:col-span-3">
+                        <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                          <label className="block text-xs font-semibold text-[#64748b]">
+                            Jeux cibles (plusieurs possibles)
+                          </label>
+                          {createForm.jeuIds.length > 0 && (
+                            <span className="text-[11px] font-semibold text-[#2563eb] bg-[#dbeafe] px-2 py-0.5 rounded-full">
+                              {createForm.jeuIds.length} sélectionné{createForm.jeuIds.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                        {availableGames.length === 0 ? (
+                          <p className="text-xs text-[#64748b]">
+                            Aucun jeu publié disponible. Les pubs doivent cibler des jeux actifs.
+                          </p>
+                        ) : (
+                          <>
+                            <div className="relative mb-2">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#94a3b8]" />
+                              <input
+                                type="text"
+                                value={gameFilter}
+                                onChange={(e) => setGameFilter(e.target.value)}
+                                placeholder="Filtrer par nom ou type de jeu..."
+                                className="sponsor-input w-full rounded-xl pl-9 pr-3 py-2 text-sm text-[#0f172a]"
+                              />
+                            </div>
+                            <div className="flex items-center gap-3 mb-2 text-[11px] font-semibold">
+                              <button
+                                type="button"
+                                onClick={() => setCreateForm((prev) => ({
+                                  ...prev,
+                                  jeuIds: Array.from(new Set([...prev.jeuIds, ...filteredAvailableGames.map((g) => g.id)])),
+                                }))}
+                                className="text-[#2563eb] hover:underline"
+                              >
+                                Tout sélectionner{gameFilter.trim() ? ' (filtrés)' : ''}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCreateForm((prev) => ({
+                                  ...prev,
+                                  jeuIds: prev.jeuIds.filter((id) => !filteredAvailableGames.some((g) => g.id === id)),
+                                }))}
+                                className="text-[#64748b] hover:underline"
+                              >
+                                Tout désélectionner
+                              </button>
+                            </div>
+                            {filteredAvailableGames.length === 0 ? (
+                              <p className="text-xs text-[#64748b] rounded-2xl border border-[rgba(37,99,235,0.14)] bg-white p-3">
+                                Aucun jeu ne correspond à « {gameFilter} ».
+                              </p>
+                            ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 rounded-2xl border border-[rgba(37,99,235,0.14)] bg-white p-3 max-h-48 overflow-y-auto">
+                            {filteredAvailableGames.map((game) => {
+                              const checked = createForm.jeuIds.includes(game.id);
+                              return (
+                                <label
+                                  key={game.id}
+                                  className={`inline-flex items-start gap-2 rounded-xl px-2.5 py-2 text-xs cursor-pointer transition-colors ${
+                                    checked ? 'bg-[#dbeafe] text-[#0f172a]' : 'text-[#64748b] hover:bg-[#f3efe6]'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setCreateForm((prev) => ({
+                                        ...prev,
+                                        jeuIds: checked
+                                          ? prev.jeuIds.filter((id) => id !== game.id)
+                                          : [...prev.jeuIds, game.id],
+                                      }));
+                                    }}
+                                    className="mt-0.5 accent-[#2563eb]"
+                                  />
+                                  <span>
+                                    <span className="font-semibold">{game.titre}</span>
+                                    <span className="block text-[11px] opacity-70">{game.typeJeu}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                     {createError && <p className="mt-2 text-xs font-semibold text-rose-600">{createError}</p>}
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-4 flex justify-end">
                       <button
                         type="submit"
                         disabled={creatingCampaign}
-                        className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                        className="sponsor-primary-btn inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
                       >
                         {creatingCampaign ? 'Création...' : 'Créer la pub'}
                       </button>
                     </div>
                   </form>
                 )}
+                {campaignError ? <p className="mb-3 text-xs font-semibold text-rose-600">{campaignError}</p> : null}
                 <div className="space-y-3">
-                  {campaigns.map((campaign) => {
-                    const budgetPercent = campaign.budgetTotal > 0
-                      ? Math.min(100, Math.round((campaign.budgetSpent / campaign.budgetTotal) * 100))
-                      : 0;
+                  {isCampaignsLoading ? (
+                    <div className="sponsor-soft-item rounded-2xl p-4 text-sm text-[#64748b] inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Chargement des publicités...
+                    </div>
+                  ) : campaigns.length === 0 ? (
+                    <p className="text-sm text-[#64748b]">Aucune publicité côté serveur pour le moment.</p>
+                  ) : (
+                    campaigns.map((campaign) => {
                     return (
                       <motion.article
                         key={campaign.id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                        className="sponsor-soft-item rounded-2xl p-4"
                       >
                         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                           <div>
-                            <p className="text-base font-bold text-slate-900">{campaign.title}</p>
-                            <p className="text-xs text-slate-500 mt-0.5">Audience: {campaign.audience}</p>
-                            <span className={`inline-flex mt-2 text-xs px-2 py-0.5 rounded-full border ${statusBadge(campaign.status)}`}>
+                            <p className="text-base font-bold text-[#0f172a]">{campaign.title}</p>
+                            <p className="text-xs text-[#64748b] mt-0.5">Jeux: {campaign.gamesLabel}</p>
+                            <span className={`inline-flex mt-2 text-xs px-2.5 py-0.5 rounded-full border ${statusBadge(campaign.status)}`}>
                               {statusLabel(campaign.status)}
                             </span>
                           </div>
                           <button
                             type="button"
-                            onClick={() => toggleCampaignStatus(campaign.id)}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                            disabled={campaignActionLoadingId === campaign.id}
+                            onClick={() => {
+                              void toggleCampaignStatus(campaign.id);
+                            }}
+                            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[rgba(12,46,43,0.12)] bg-white px-3.5 py-2 text-sm font-semibold text-[#0f172a] hover:bg-[#f3efe6] transition-colors disabled:opacity-60"
                           >
-                            {campaign.status === 'ACTIVE' ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                            {campaignActionLoadingId === campaign.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : campaign.status === 'ACTIVE' ? (
+                              <Pause className="h-4 w-4" />
+                            ) : (
+                              <Play className="h-4 w-4" />
+                            )}
                             {campaign.status === 'ACTIVE' ? 'Mettre en pause' : 'Activer'}
                           </button>
                         </div>
 
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-slate-600">
-                          <p className="inline-flex items-center gap-1.5"><Coins className="h-3.5 w-3.5" /> {campaign.budgetSpent}/{campaign.budgetTotal} TND</p>
-                          <p className="inline-flex items-center gap-1.5"><Eye className="h-3.5 w-3.5" /> {campaign.impressions.toLocaleString()} impressions</p>
-                          <p className="inline-flex items-center gap-1.5"><MousePointerClick className="h-3.5 w-3.5" /> {campaign.clicks.toLocaleString()} clics</p>
-                        </div>
-
-                        <div className="mt-2 h-2 rounded-full bg-slate-200 overflow-hidden">
-                          <div className="h-full rounded-full bg-slate-900" style={{ width: `${budgetPercent}%` }} />
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#64748b]">
+                          <p className="inline-flex items-center gap-1.5"><Eye className="h-3.5 w-3.5 text-[#2563eb]" /> {campaign.impressions.toLocaleString()} impressions</p>
+                          <p className="inline-flex items-center gap-1.5"><MousePointerClick className="h-3.5 w-3.5 text-[#2563eb]" /> {campaign.clicks.toLocaleString()} clics</p>
                         </div>
                       </motion.article>
                     );
-                  })}
+                  })
+                  )}
                 </div>
-              </section>
+              </motion.section>
             )}
 
             {activeSection === 'rewards' && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                  <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2">
-                    <Gift className="h-5 w-5 text-slate-700" />
+              <motion.section
+                key="rewards"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="sponsor-panel rounded-3xl p-6"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                  <h2 className="sponsor-display text-2xl font-bold text-[#0f172a] inline-flex items-center gap-2">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#e0f2fe] text-[#0ea5e9]">
+                      <Gift className="h-4 w-4" />
+                    </span>
                     Gestion des récompenses physiques
                   </h2>
                   {editingRewardId ? (
@@ -871,31 +1221,33 @@ export default function SponsorDashboard() {
                         setRewardError(null);
                         resetRewardForm();
                       }}
-                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                      className="inline-flex items-center justify-center rounded-2xl border border-[rgba(12,46,43,0.12)] bg-white px-3.5 py-2 text-sm font-semibold text-[#0f172a] hover:bg-[#f3efe6] transition-colors"
                     >
                       Annuler l édition
                     </button>
                   ) : null}
                 </div>
 
-                <form onSubmit={handleCreateOrUpdateReward} className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <form onSubmit={handleCreateOrUpdateReward} className="mb-5 sponsor-soft-item rounded-2xl p-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="xl:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Nom de la récompense</label>
+                      <label htmlFor="reward-nom" className="block text-xs font-semibold text-[#64748b] mb-1">Nom de la récompense</label>
                       <input
+                        id="reward-nom"
                         type="text"
                         value={rewardForm.nom}
                         onChange={(e) => setRewardForm((prev) => ({ ...prev, nom: e.target.value }))}
                         placeholder="Ex: Ticket match football"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Type</label>
+                      <label htmlFor="reward-type" className="block text-xs font-semibold text-[#64748b] mb-1">Type</label>
                       <select
+                        id="reward-type"
                         value={rewardForm.typeRecompense}
                         onChange={(e) => setRewardForm((prev) => ({ ...prev, typeRecompense: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                       >
                         {rewardTypeOptions.map((type) => (
                           <option key={type} value={type}>{rewardTypeLabels[type]}</option>
@@ -903,31 +1255,33 @@ export default function SponsorDashboard() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Score minimum</label>
+                      <label htmlFor="reward-scoreMin" className="block text-xs font-semibold text-[#64748b] mb-1">Score minimum</label>
                       <input
+                        id="reward-scoreMin"
                         type="number"
                         min={0}
                         value={rewardForm.scoreMin}
                         onChange={(e) => setRewardForm((prev) => ({ ...prev, scoreMin: e.target.value }))}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                       />
                     </div>
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Description</label>
+                      <label htmlFor="reward-description" className="block text-xs font-semibold text-[#64748b] mb-1">Description</label>
                       <textarea
+                        id="reward-description"
                         value={rewardForm.description}
                         onChange={(e) => setRewardForm((prev) => ({ ...prev, description: e.target.value }))}
                         rows={2}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400"
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
                       />
                     </div>
                   </div>
                   {rewardError ? <p className="mt-2 text-xs font-semibold text-rose-600">{rewardError}</p> : null}
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-4 flex justify-end">
                     <button
                       type="submit"
                       disabled={creatingReward}
-                      className="inline-flex items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                      className="sponsor-primary-btn inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold disabled:opacity-60"
                     >
                       {creatingReward ? 'Enregistrement...' : editingRewardId ? 'Mettre à jour la récompense' : 'Créer la récompense'}
                     </button>
@@ -935,30 +1289,32 @@ export default function SponsorDashboard() {
                 </form>
 
                 {isRewardsLoading ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 inline-flex items-center gap-2">
+                  <div className="sponsor-soft-item rounded-2xl p-4 text-sm text-[#64748b] inline-flex items-center gap-2">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Chargement des récompenses...
                   </div>
+                ) : rewards.length === 0 ? (
+                  <p className="mb-3 text-sm text-[#64748b]">Aucune récompense côté serveur pour le moment.</p>
                 ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {rewards.map((reward) => (
-                    <article key={reward.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-sm font-bold text-slate-900">{reward.name}</p>
-                      <p className="text-xs text-indigo-700 font-semibold mt-1">{rewardTypeLabels[reward.rewardType] ?? reward.rewardType}</p>
-                      {reward.description ? <p className="text-xs text-slate-500 mt-1">{reward.description}</p> : null}
-                      <p className="text-xs text-slate-600 mt-2">{reward.pointsCost} pts</p>
-                      <span className={`inline-flex mt-2 text-[11px] px-2 py-0.5 rounded-full border ${reward.enabled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
-                        {reward.enabled ? 'Active' : 'Inactive'}
+                    <article key={reward.id} className="sponsor-soft-item rounded-2xl p-4">
+                      <p className="text-sm font-bold text-[#0f172a]">{reward.name}</p>
+                      <p className="text-xs text-[#2563eb] font-semibold mt-1">{rewardTypeLabels[reward.rewardType] ?? reward.rewardType}</p>
+                      {reward.description ? <p className="text-xs text-[#64748b] mt-1">{reward.description}</p> : null}
+                      <p className="text-xs text-[#64748b] mt-2">{reward.pointsCost} pts</p>
+                      <span className={`inline-flex mt-2 text-[11px] px-2.5 py-0.5 rounded-full border ${reward.enabled ? 'bg-emerald-100/80 text-emerald-800 border-emerald-200' : 'bg-[#f1f5f9] text-[#475569] border-[#cbd5e1]'}`}>
+                        {reward.enabled ? 'Actif' : 'Inactif'}
                       </span>
                       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
                         <button
                           type="button"
                           onClick={() => toggleReward(reward.id)}
                           disabled={rewardActionLoadingId === reward.id}
-                          className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${
+                          className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${
                             reward.enabled
-                              ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                              : 'bg-slate-700 text-white hover:bg-slate-800'
+                              ? 'bg-[#2563eb] text-white hover:bg-[#155851]'
+                              : 'bg-[#0f172a] text-white hover:bg-[#1d4ed8]'
                           } disabled:opacity-60`}
                         >
                           {rewardActionLoadingId === reward.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
@@ -968,7 +1324,7 @@ export default function SponsorDashboard() {
                           type="button"
                           onClick={() => handleViewReward(reward.id)}
                           disabled={rewardActionLoadingId === reward.id}
-                          className="inline-flex items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-60"
+                          className="inline-flex items-center justify-center rounded-xl border border-[#dbeafe] bg-[#dbeafe]/60 px-3 py-2 text-xs font-semibold text-[#0f172a] hover:bg-[#dbeafe] transition-colors disabled:opacity-60"
                         >
                           Voir
                         </button>
@@ -976,7 +1332,7 @@ export default function SponsorDashboard() {
                           type="button"
                           onClick={() => handleEditReward(reward)}
                           disabled={rewardActionLoadingId === reward.id}
-                          className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                          className="inline-flex items-center justify-center rounded-xl border border-[rgba(12,46,43,0.12)] bg-white px-3 py-2 text-xs font-semibold text-[#0f172a] hover:bg-[#f3efe6] transition-colors"
                         >
                           Modifier
                         </button>
@@ -984,7 +1340,7 @@ export default function SponsorDashboard() {
                           type="button"
                           onClick={() => handleDeleteReward(reward.id)}
                           disabled={rewardActionLoadingId === reward.id}
-                          className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-60"
+                          className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-60"
                         >
                           Supprimer
                         </button>
@@ -993,38 +1349,38 @@ export default function SponsorDashboard() {
                   ))}
                 </div>
 
-                <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mt-6 sponsor-soft-item rounded-2xl p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-slate-900">Demandes joueurs</h3>
+                    <h3 className="text-sm font-bold text-[#0f172a]">Demandes joueurs</h3>
                     <button
                       type="button"
                       onClick={loadRewardRequests}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                      className="rounded-xl border border-[rgba(12,46,43,0.12)] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f172a] hover:bg-[#f3efe6]"
                     >
                       Actualiser
                     </button>
                   </div>
 
                   {rewardRequests.length === 0 ? (
-                    <p className="text-xs text-slate-500">Aucune demande pour le moment.</p>
+                    <p className="text-xs text-[#64748b]">Aucune demande pour le moment.</p>
                   ) : (
                     <div className="space-y-2">
                       {rewardRequests.map((request) => {
                         const normalizedStatus = (request.status ?? 'PENDING').toUpperCase();
                         const isPending = normalizedStatus === 'PENDING';
                         return (
-                          <article key={request.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                          <article key={request.id} className="rounded-2xl border border-[rgba(12,46,43,0.08)] bg-white p-3.5">
                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                               <div>
-                                <p className="text-sm font-semibold text-slate-900">{request.rewardName ?? 'Récompense'}</p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-sm font-semibold text-[#0f172a]">{request.rewardName ?? 'Récompense'}</p>
+                                <p className="text-xs text-[#64748b]">
                                   Joueur: {request.playerName ?? 'Inconnu'} {request.playerEmail ? `(${request.playerEmail})` : ''}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-[#64748b]">
                                   Score joueur: {request.playerScoreTotal ?? 0} • Seuil: {request.rewardScoreMin ?? 0}
                                 </p>
                               </div>
-                              <span className={`inline-flex w-fit text-[11px] px-2 py-0.5 rounded-full border ${rewardRequestStatusBadge(request.status)}`}>
+                              <span className={`inline-flex w-fit text-[11px] px-2.5 py-0.5 rounded-full border ${rewardRequestStatusBadge(request.status)}`}>
                                 {rewardRequestStatusLabel(request.status)}
                               </span>
                             </div>
@@ -1038,7 +1394,7 @@ export default function SponsorDashboard() {
                                       if (!request.id) return;
                                       void updateRewardRequestStatus(request.id, 'APPROVED');
                                     }}
-                                    className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-700 disabled:opacity-60"
+                                    className="rounded-xl bg-[#2563eb] px-3 py-2 text-xs font-semibold text-white hover:bg-[#155851] disabled:opacity-60"
                                   >
                                     Approuver
                                   </button>
@@ -1049,7 +1405,7 @@ export default function SponsorDashboard() {
                                       if (!request.id) return;
                                       void updateRewardRequestStatus(request.id, 'REJECTED');
                                     }}
-                                    className="rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                                    className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                                   >
                                     Rejeter
                                   </button>
@@ -1062,38 +1418,295 @@ export default function SponsorDashboard() {
                     </div>
                   )}
                 </div>
-              </section>
+              </motion.section>
             )}
 
             {activeSection === 'analytics' && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5">
-                <h2 className="text-lg font-bold text-slate-900 inline-flex items-center gap-2 mb-5">
-                  <BarChart3 className="h-5 w-5 text-slate-700" />
-                  Statistiques publicitaires
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {campaigns.map((campaign) => {
-                    const ctr = campaign.impressions > 0 ? (campaign.clicks / campaign.impressions) * 100 : 0;
-                    const scaled = Math.min(100, Math.round(ctr * 10));
-                    return (
-                      <div key={campaign.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                        <p className="text-sm font-semibold text-slate-900 truncate">{campaign.title}</p>
-                        <p className="text-xs text-slate-500 mt-1">CTR: {ctr.toFixed(2)}%</p>
-                        <div className="mt-3 h-2 rounded-full bg-slate-200 overflow-hidden">
-                          <div className="h-full rounded-full bg-slate-900" style={{ width: `${scaled}%` }} />
+              <motion.section
+                key="analytics"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="space-y-5"
+              >
+                <div className="sponsor-panel rounded-3xl p-6">
+                  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="sponsor-display text-2xl font-bold text-[#0f172a] inline-flex items-center gap-2">
+                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#dbeafe] text-[#2563eb]">
+                        <BarChart3 className="h-4 w-4" />
+                      </span>
+                      Statistiques publicitaires
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={refreshAnalytics}
+                      className="inline-flex items-center justify-center rounded-2xl border border-[rgba(12,46,43,0.12)] bg-white px-3.5 py-2 text-sm font-semibold text-[#0f172a] hover:bg-[#f3efe6]"
+                    >
+                      Actualiser
+                    </button>
+                  </div>
+
+                  <div className="mb-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Impressions (vues)', value: stats.totalImpressions.toLocaleString() },
+                      { label: 'Clics sur l’offre', value: stats.totalClicks.toLocaleString() },
+                      { label: 'Campagnes actives', value: String(stats.activeCampaigns) },
+                    ].map((card) => (
+                      <div key={card.label} className="sponsor-soft-item rounded-2xl p-3.5">
+                        <p className="text-xs text-[#64748b]">{card.label}</p>
+                        <p className="sponsor-display mt-1 text-xl font-bold text-[#0f172a]">{card.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {topCampaign ? (
+                    <div className="mb-5 rounded-2xl border border-[#dbeafe] bg-gradient-to-r from-[#dbeafe]/80 to-[#e0f2fe]/50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2563eb]">
+                        Meilleure campagne (vues)
+                      </p>
+                      <p className="mt-1 text-base font-bold text-[#0f172a]">{topCampaign.title}</p>
+                      <p className="mt-1 text-xs text-[#64748b]">
+                        {topCampaign.impressions.toLocaleString()} vues · {topCampaign.clicks.toLocaleString()} clics
+                      </p>
+                      <p className="mt-1 text-xs text-[#94a3b8]">Jeux: {topCampaign.gamesLabel}</p>
+                    </div>
+                  ) : null}
+
+                  {isCampaignsLoading ? (
+                    <p className="text-sm text-[#64748b] inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Chargement des statistiques...
+                    </p>
+                  ) : campaignPerformance.length === 0 ? (
+                    <p className="text-sm text-[#64748b]">Aucune publicité à analyser pour le moment.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {campaignPerformance.map((campaign, index) => (
+                        <article
+                          key={campaign.id}
+                          className="sponsor-soft-item rounded-2xl p-4"
+                        >
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-[#0f172a]">
+                                #{index + 1} · {campaign.title}
+                              </p>
+                              <p className="mt-0.5 text-xs text-[#64748b]">Jeux: {campaign.gamesLabel}</p>
+                              <span className={`inline-flex mt-2 text-[11px] px-2.5 py-0.5 rounded-full border ${statusBadge(campaign.status)}`}>
+                                {statusLabel(campaign.status)}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 text-right">
+                              <div>
+                                <p className="text-[11px] text-[#64748b]">Vues</p>
+                                <p className="text-sm font-bold text-[#0f172a]">{campaign.impressions.toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <p className="text-[11px] text-[#64748b]">Clics</p>
+                                <p className="text-sm font-bold text-[#0f172a]">{campaign.clicks.toLocaleString()}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 space-y-2">
+                            <div>
+                              <div className="mb-1 flex items-center justify-between text-[11px] text-[#64748b]">
+                                <span>Impressions</span>
+                                <span>{Math.round((campaign.impressions / maxImpressions) * 100)}%</span>
+                              </div>
+                              <div className="sponsor-progress h-2 rounded-full overflow-hidden">
+                                <span
+                                  className="block h-full rounded-full"
+                                  style={{ width: `${Math.max(4, Math.round((campaign.impressions / maxImpressions) * 100))}%` }}
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <div className="mb-1 flex items-center justify-between text-[11px] text-[#64748b]">
+                                <span>Clics</span>
+                                <span>{Math.round((campaign.clicks / maxClicks) * 100)}%</span>
+                              </div>
+                              <div className="h-2 rounded-full bg-[rgba(12,46,43,0.08)] overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-[#2563eb]"
+                                  style={{ width: `${Math.max(campaign.clicks > 0 ? 4 : 0, Math.round((campaign.clicks / maxClicks) * 100))}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-5 rounded-2xl border border-[rgba(12,46,43,0.08)] bg-[#f3efe6]/70 p-4">
+                    <p className="text-sm text-[#0f172a] inline-flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-[#2563eb]" />
+                      Performance globale: {stats.totalClicks.toLocaleString()} clics sur {stats.totalImpressions.toLocaleString()} impressions
+                      {' '}· {stats.distributedRewards} récompenses distribuées.
+                    </p>
+                  </div>
+                </div>
+              </motion.section>
+            )}
+
+            {activeSection === 'profile' && (
+              <motion.section
+                key="profile"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="space-y-5"
+              >
+                {profileLoading ? (
+                  <div className="sponsor-panel rounded-3xl p-8 flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-[#2563eb]" />
+                  </div>
+                ) : !profile ? (
+                  <div className="sponsor-panel rounded-3xl p-8 text-[#64748b]">Profil introuvable.</div>
+                ) : (
+                  <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                    <form onSubmit={handleSaveProfile} className="xl:col-span-2 sponsor-panel rounded-3xl p-6 space-y-5">
+                      <h2 className="sponsor-display text-2xl font-bold text-[#0f172a] inline-flex items-center gap-2">
+                        <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#dbeafe] text-[#2563eb]">
+                          <UserCircle className="h-4 w-4" />
+                        </span>
+                        Mes informations
+                      </h2>
+
+                      {profileError && <div className="p-3 rounded-xl bg-red-50 text-red-700 text-sm">{profileError}</div>}
+                      {profileSuccess && <div className="p-3 rounded-xl bg-emerald-50 text-emerald-700 text-sm">{profileSuccess}</div>}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label htmlFor="sponsor-profile-prenom" className="block text-xs font-semibold text-[#64748b] mb-1 inline-flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5" /> Prénom
+                          </label>
+                          <input
+                            id="sponsor-profile-prenom"
+                            type="text"
+                            value={profileForm.prenom}
+                            onChange={(e) => {
+                              setProfileForm((prev) => ({ ...prev, prenom: e.target.value }));
+                              setProfileFormErrors((prev) => ({ ...prev, prenom: '' }));
+                            }}
+                            className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
+                          />
+                          {profileFormErrors.prenom && <p className="mt-1 text-xs text-red-600">{profileFormErrors.prenom}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="sponsor-profile-nom" className="block text-xs font-semibold text-[#64748b] mb-1 inline-flex items-center gap-1.5">
+                            <User className="h-3.5 w-3.5" /> Nom
+                          </label>
+                          <input
+                            id="sponsor-profile-nom"
+                            type="text"
+                            value={profileForm.nom}
+                            onChange={(e) => {
+                              setProfileForm((prev) => ({ ...prev, nom: e.target.value }));
+                              setProfileFormErrors((prev) => ({ ...prev, nom: '' }));
+                            }}
+                            className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
+                          />
+                          {profileFormErrors.nom && <p className="mt-1 text-xs text-red-600">{profileFormErrors.nom}</p>}
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
 
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm text-slate-700 inline-flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4" />
-                    Performance globale: {stats.totalClicks.toLocaleString()} clics sur {stats.totalImpressions.toLocaleString()} impressions.
-                  </p>
-                </div>
-              </section>
+                      <div>
+                        <label htmlFor="sponsor-profile-email" className="block text-xs font-semibold text-[#64748b] mb-1 inline-flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5" /> E-mail
+                        </label>
+                        <input
+                          id="sponsor-profile-email"
+                          type="email"
+                          value={profile.email ?? ''}
+                          readOnly
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#94a3b8] bg-[#f1f5f9]/60 cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="sponsor-profile-telephone" className="block text-xs font-semibold text-[#64748b] mb-1 inline-flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5" /> Téléphone
+                        </label>
+                        <input
+                          id="sponsor-profile-telephone"
+                          type="text"
+                          value={profileForm.telephone}
+                          onChange={(e) => {
+                            setProfileForm((prev) => ({ ...prev, telephone: e.target.value }));
+                            setProfileFormErrors((prev) => ({ ...prev, telephone: '' }));
+                          }}
+                          className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
+                        />
+                        {profileFormErrors.telephone && <p className="mt-1 text-xs text-red-600">{profileFormErrors.telephone}</p>}
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="submit"
+                          disabled={profileSaving}
+                          className="sponsor-primary-btn inline-flex items-center gap-2 rounded-2xl px-5 py-2.5 text-sm font-semibold disabled:opacity-60"
+                        >
+                          {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                          Enregistrer
+                        </button>
+                      </div>
+                    </form>
+
+                    <form onSubmit={handleChangeSponsorPassword} className="sponsor-panel rounded-3xl p-6 space-y-3 h-fit">
+                      <p className="text-sm font-bold text-[#0f172a] inline-flex items-center gap-2">
+                        <Lock className="h-4 w-4 text-[#2563eb]" />
+                        Changer mot de passe
+                      </p>
+                      <input
+                        type="password"
+                        aria-label="Mot de passe actuel"
+                        placeholder="Mot de passe actuel"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => {
+                          setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }));
+                          setProfileFormErrors((prev) => ({ ...prev, currentPassword: '' }));
+                        }}
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
+                      />
+                      {profileFormErrors.currentPassword && <p className="text-xs text-red-600 -mt-1.5">{profileFormErrors.currentPassword}</p>}
+                      <input
+                        type="password"
+                        aria-label="Nouveau mot de passe"
+                        placeholder="Nouveau mot de passe"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => {
+                          setPasswordForm((p) => ({ ...p, newPassword: e.target.value }));
+                          setProfileFormErrors((prev) => ({ ...prev, newPassword: '' }));
+                        }}
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
+                      />
+                      {profileFormErrors.newPassword && <p className="text-xs text-red-600 -mt-1.5">{profileFormErrors.newPassword}</p>}
+                      <input
+                        type="password"
+                        aria-label="Confirmer le mot de passe"
+                        placeholder="Confirmer le mot de passe"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => {
+                          setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }));
+                          setProfileFormErrors((prev) => ({ ...prev, confirmPassword: '' }));
+                        }}
+                        className="sponsor-input w-full rounded-xl px-3 py-2.5 text-sm text-[#0f172a]"
+                      />
+                      {profileFormErrors.confirmPassword && <p className="text-xs text-red-600 -mt-1.5">{profileFormErrors.confirmPassword}</p>}
+                      <button
+                        type="submit"
+                        disabled={profileSaving}
+                        className="w-full inline-flex items-center justify-center gap-2 rounded-2xl bg-[#0f172a] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1e293b] disabled:opacity-60 transition-colors"
+                      >
+                        {profileSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+                        Mettre à jour le mot de passe
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </motion.section>
             )}
           </div>
         </main>
@@ -1111,45 +1724,45 @@ export default function SponsorDashboard() {
             className="w-full max-w-xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="relative border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-slate-50 to-cyan-50 px-6 py-5">
+            <div className="relative border-b border-[rgba(12,46,43,0.08)] bg-gradient-to-r from-[#dbeafe] via-[#faf8f4] to-[#e0f2fe] px-6 py-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Détail récompense</p>
-                  <h3 className="mt-1 text-2xl font-black text-slate-900">{selectedReward.name}</h3>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2563eb]">Détail récompense</p>
+                  <h3 className="sponsor-display mt-1 text-2xl font-extrabold text-[#0f172a]">{selectedReward.name}</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsRewardModalOpen(false)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/80 text-slate-600 hover:bg-white"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-[rgba(37,99,235,0.14)] bg-white/80 text-[#64748b] hover:bg-white"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-800">
+                <span className="inline-flex items-center rounded-full border border-[#dbeafe] bg-[#dbeafe] px-2.5 py-1 text-xs font-semibold text-[#0f172a]">
                   {rewardTypeLabels[selectedReward.rewardType] ?? selectedReward.rewardType}
                 </span>
                 <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
                   selectedReward.enabled
                     ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
-                    : 'border-slate-200 bg-slate-100 text-slate-700'
+                    : 'border-[#cbd5e1] bg-[#f1f5f9] text-[#475569]'
                 }`}>
-                  {selectedReward.enabled ? 'Active' : 'Inactive'}
+                  {selectedReward.enabled ? 'Actif' : 'Inactif'}
                 </span>
               </div>
             </div>
 
             <div className="px-6 py-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Score minimum</p>
-                  <p className="mt-1 text-sm font-bold text-slate-900">{selectedReward.pointsCost} pts</p>
+                <div className="sponsor-soft-item rounded-2xl px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">Score minimum</p>
+                  <p className="mt-1 text-sm font-bold text-[#0f172a]">{selectedReward.pointsCost} pts</p>
                 </div>
               </div>
 
-              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Description</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
+              <div className="mt-4 rounded-2xl border border-[rgba(12,46,43,0.08)] bg-white p-3.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">Description</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-[#3f4d49]">
                   {selectedReward.description || 'Aucune description fournie pour cette récompense.'}
                 </p>
               </div>
@@ -1158,7 +1771,7 @@ export default function SponsorDashboard() {
                 <button
                   type="button"
                   onClick={() => setIsRewardModalOpen(false)}
-                  className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  className="sponsor-primary-btn inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold"
                 >
                   Fermer
                 </button>

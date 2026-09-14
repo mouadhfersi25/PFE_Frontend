@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../../../services/auth.service";
-import { validateEmail, validatePassword, validateName, validatePhone, validateDate } from "../../../utils/validators";
+import { validateEmail, validatePassword, validateName, validateDate } from "../../../utils/validators";
 import { formStyles } from "../../../styles/formStyles";
 import { useInputFocus } from "../../../hooks/useInputFocus";
 import { getErrorMessage, isTimeoutError } from "../../../utils/errorHandler";
+import { getDialCode, getPhoneLength, validatePhoneForCountry } from "../../../utils/countryDialCodes";
+import PhoneCountryField from "./PhoneCountryField";
 
 const REGISTRATION_SUCCESS_MESSAGE =
-  "Inscription réussie ! Vérifiez votre email pour activer votre compte.";
+  "Inscription parent réussie ! Vérifiez votre e-mail pour activer votre compte.";
 
 export default function RegisterForm() {
   const navigate = useNavigate();
@@ -18,12 +20,17 @@ export default function RegisterForm() {
     password: "",
     telephone: "",
     dateDeNaissance: "",
+    cin: "",
+    paysNom: "",
+    genre: "",
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string | null>>({});
-  const { focusedField, handleFocus, handleBlur } = useInputFocus();
+  const { handleFocus, handleBlur } = useInputFocus();
+
+  const dialCode = getDialCode(form.paysNom);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -50,15 +57,21 @@ export default function RegisterForm() {
     }
 
     if (!form.email.trim()) {
-      newErrors.email = "L'email est requis";
+      newErrors.email = "L'e-mail est requis";
     } else if (!validateEmail(form.email)) {
-      newErrors.email = "Format d'email invalide";
+      newErrors.email = "Format d'e-mail invalide";
     }
 
     if (!form.password) {
       newErrors.password = "Le mot de passe est requis";
     } else if (!validatePassword(form.password)) {
       newErrors.password = "Le mot de passe doit contenir au moins 6 caractères";
+    }
+
+    if (!form.cin.trim()) {
+      newErrors.cin = "Le CIN est requis";
+    } else if (!/^[0-9]{8}$/.test(form.cin.trim())) {
+      newErrors.cin = "Le CIN doit contenir exactement 8 chiffres";
     }
 
     if (!form.dateDeNaissance) {
@@ -70,15 +83,27 @@ export default function RegisterForm() {
       const today = new Date();
       const age = today.getFullYear() - birthDate.getFullYear();
       const monthDiff = today.getMonth() - birthDate.getMonth();
-      const actualAge = monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate()) ? age - 1 : age;
-      
-      if (actualAge < 7) {
-        newErrors.dateDeNaissance = "L'âge minimum requis est de 7 ans";
+      const actualAge =
+        monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate()) ? age - 1 : age;
+
+      if (actualAge < 18) {
+        newErrors.dateDeNaissance = "L'âge minimum pour un compte parent est de 18 ans";
       }
     }
 
-    if (form.telephone && !validatePhone(form.telephone)) {
-      newErrors.telephone = "Le téléphone doit contenir exactement 8 chiffres";
+    if (!form.paysNom.trim()) {
+      newErrors.paysNom = "Choisissez un pays (drapeau) pour le téléphone";
+    }
+
+    if (!form.genre) {
+      newErrors.genre = "Le genre est requis";
+    }
+
+    if (!form.telephone.trim()) {
+      newErrors.telephone = "Le téléphone est requis";
+    } else if (!validatePhoneForCountry(form.telephone, form.paysNom)) {
+      const expectedLength = getPhoneLength(form.paysNom);
+      newErrors.telephone = `Le téléphone doit contenir exactement ${expectedLength} chiffres pour ce pays`;
     }
 
     setErrors(newErrors);
@@ -97,18 +122,29 @@ export default function RegisterForm() {
     setLoading(true);
 
     try {
-      const registerData: { nom: string; prenom: string; email: string; password: string; dateDeNaissance: string; telephone?: string } = {
+      const registerData: {
+        nom: string;
+        prenom: string;
+        email: string;
+        password: string;
+        dateDeNaissance: string;
+        cin: string;
+        telephone: string;
+        paysNom: string;
+        genre: string;
+      } = {
         nom: form.nom.trim(),
         prenom: form.prenom.trim(),
         email: form.email.trim().toLowerCase(),
         password: form.password,
         dateDeNaissance: form.dateDeNaissance,
+        cin: form.cin.trim(),
+        // L'indicatif du pays choisi via le drapeau est ajouté automatiquement devant
+        // le numéro (ex. Tunisie -> +216XXXXXXXX).
+        telephone: `${dialCode}${form.telephone.trim()}`,
+        paysNom: form.paysNom.trim(),
+        genre: form.genre,
       };
-
-      const phoneTrimmed = form.telephone?.trim();
-      if (phoneTrimmed && phoneTrimmed.length === 8 && /^[0-9]{8}$/.test(phoneTrimmed)) {
-        registerData.telephone = phoneTrimmed;
-      }
 
       await authService.register(registerData);
       navigate("/login", {
@@ -121,12 +157,12 @@ export default function RegisterForm() {
           replace: true,
           state: {
             message:
-              "Ton compte a peut-être été créé. Vérifie ton email pour confirmer l'inscription.",
+              "Votre compte a peut-être été créé. Vérifiez votre e-mail pour confirmer l'inscription.",
           },
         });
         return;
       }
-      
+
       const errorMessage = getErrorMessage(err, "Erreur lors de l'inscription");
       setError(errorMessage);
     } finally {
@@ -136,21 +172,15 @@ export default function RegisterForm() {
 
   const styles = formStyles;
 
-  const renderInput = (name: keyof typeof form, label: string, icon: string, placeholder: string, type = "text", required = true) => (
+  const renderInput = (name: keyof typeof form, placeholder: string, type = "text") => (
     <div style={styles.formGroup}>
-      <label htmlFor={name} style={styles.label}>
-        <span style={styles.labelIcon}>{icon}</span>
-        <span>
-          {label} {required && <span style={styles.required}>*</span>}
-        </span>
-      </label>
       <div style={styles.inputWrapper}>
-        <div style={{ ...styles.inputGlow, opacity: focusedField === name ? 1 : 0 }} />
         <input
           type={type}
           id={name}
           name={name}
           placeholder={placeholder}
+          aria-label={placeholder}
           value={form[name]}
           onChange={handleChange}
           onFocus={(e) => handleFocus(name, e)}
@@ -161,137 +191,149 @@ export default function RegisterForm() {
           }}
         />
       </div>
-      {errors[name] && <span style={styles.errorText}>⚠️ {errors[name]}</span>}
+      {errors[name] && <span style={styles.errorText}>{errors[name]}</span>}
     </div>
   );
 
   return (
-    <>
-      <form onSubmit={handleSubmit} style={styles.form} noValidate>
-        {/* Message d'information */}
-        <div style={styles.infoBox}>
-          <span>🎮</span>
-          <span>Création d'un compte <strong>Joueur</strong> pour accéder aux jeux éducatifs</span>
+    <form onSubmit={handleSubmit} style={styles.form} noValidate>
+      <div style={styles.infoBox}>
+        Inscription <strong>parent</strong>. Vous pourrez ensuite ajouter les comptes joueurs depuis votre tableau de bord.
+        Éducateurs et sponsors sont créés par l’administrateur.
+      </div>
+
+      {error && <div style={styles.error}>{error}</div>}
+
+      {renderInput("email", "Adresse e-mail")}
+
+      <div className="grid grid-cols-2 gap-3">
+        {renderInput("nom", "Nom")}
+        {renderInput("prenom", "Prénom")}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {renderInput("password", "Mot de passe (min. 6)", "password")}
+        {renderInput("cin", "CIN (8 chiffres)")}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div style={styles.formGroup}>
+          <PhoneCountryField
+            value={form.telephone}
+            onValueChange={(value) => {
+              setForm((f) => ({ ...f, telephone: value }));
+              if (errors.telephone) setErrors((prev) => ({ ...prev, telephone: null }));
+              if (error) setError(null);
+            }}
+            countryName={form.paysNom}
+            onCountryChange={(countryName) => {
+              setForm((f) => ({ ...f, paysNom: countryName }));
+              if (errors.paysNom) setErrors((prev) => ({ ...prev, paysNom: null }));
+            }}
+            error={errors.telephone || errors.paysNom}
+            placeholder={
+              form.paysNom
+                ? `Téléphone (${getPhoneLength(form.paysNom)} chiffres)`
+                : "Téléphone (choisir un pays)"
+            }
+          />
         </div>
 
-        {error && (
-          <div style={styles.error}>
-            <span style={{ fontSize: "20px" }}>⚠️</span>
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Nom */}
-        {renderInput("nom", "Nom", "👤", "Ton nom")}
-
-        {/* Prénom */}
-        {renderInput("prenom", "Prénom", "✨", "Ton prénom")}
-
-        {/* Email */}
-        {renderInput("email", "Email", "📧", "exemple@email.com")}
-
-        {/* Mot de passe */}
-        {renderInput("password", "Mot de passe", "🔒", "Minimum 6 caractères", "password")}
-
-        {/* Date de naissance */}
         <div style={styles.formGroup}>
-          <label htmlFor="dateDeNaissance" style={styles.label}>
-            <span style={styles.labelIcon}>🎂</span>
-            <span>
-              Date de naissance <span style={styles.required}>*</span>
-              <span style={{ fontSize: "12px", color: "#6b7280", fontWeight: "400", marginLeft: "8px" }}>
-                (Minimum 7 ans)
-              </span>
-            </span>
-          </label>
           <div style={styles.inputWrapper}>
-            <div style={{ ...styles.inputGlow, opacity: focusedField === 'dateDeNaissance' ? 1 : 0 }} />
             <input
               type="date"
               id="dateDeNaissance"
               name="dateDeNaissance"
+              aria-label="Date de naissance (âge min. 18 ans)"
               value={form.dateDeNaissance}
               onChange={handleChange}
-              onFocus={(e) => handleFocus('dateDeNaissance', e)}
-              onBlur={(e) => handleBlur('dateDeNaissance', !!errors.dateDeNaissance, e)}
+              onFocus={(e) => handleFocus("dateDeNaissance", e)}
+              onBlur={(e) => handleBlur("dateDeNaissance", !!errors.dateDeNaissance, e)}
               style={{
                 ...styles.input,
                 ...(errors.dateDeNaissance ? styles.inputError : {}),
               }}
             />
           </div>
-          {errors.dateDeNaissance && <span style={styles.errorText}>⚠️ {errors.dateDeNaissance}</span>}
+          {errors.dateDeNaissance ? (
+            <span style={styles.errorText}>{errors.dateDeNaissance}</span>
+          ) : (
+            <span className="text-xs text-slate-400 px-0.5">Âge min. 18 ans</span>
+          )}
         </div>
+      </div>
 
-        {/* Téléphone */}
-        <div style={styles.formGroup}>
-          <label htmlFor="telephone" style={styles.label}>
-            <span style={styles.labelIcon}>📱</span>
-            <span>Téléphone <span style={styles.optional}>(optionnel)</span></span>
-          </label>
-          <div style={styles.inputWrapper}>
-            <div style={{ ...styles.inputGlow, opacity: focusedField === 'telephone' ? 1 : 0 }} />
-            <input
-              type="text"
-              id="telephone"
-              name="telephone"
-              placeholder="8 chiffres (ex: 12345678)"
-              value={form.telephone}
-              onChange={handleChange}
-              onFocus={(e) => handleFocus('telephone', e)}
-              onBlur={(e) => handleBlur('telephone', !!errors.telephone, e)}
+      <div style={styles.formGroup}>
+        <span style={{ fontSize: '13px', fontWeight: 600, color: '#475569' }}>
+          Genre <span style={styles.required}>*</span>
+        </span>
+        <div style={{ display: 'flex', gap: '16px' }}>
+          {(['HOMME', 'FEMME'] as const).map((option) => (
+            <label
+              key={option}
               style={{
-                ...styles.input,
-                ...(errors.telephone ? styles.inputError : {}),
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '14px',
+                color: '#0f172a',
+                cursor: 'pointer',
               }}
-            />
-          </div>
-          {errors.telephone && <span style={styles.errorText}>⚠️ {errors.telephone}</span>}
+            >
+              <input
+                type="radio"
+                name="genre"
+                value={option}
+                checked={form.genre === option}
+                onChange={() => {
+                  setForm((f) => ({ ...f, genre: option }));
+                  if (errors.genre) setErrors((prev) => ({ ...prev, genre: null }));
+                }}
+              />
+              {option === 'HOMME' ? 'Homme' : 'Femme'}
+            </label>
+          ))}
         </div>
+        {errors.genre && <span style={styles.errorText}>{errors.genre}</span>}
+      </div>
 
-        {/* Bouton */}
-        <button 
-          type="submit" 
-          disabled={loading} 
-          style={{
-            ...styles.button(loading),
-            animation: loading ? "none" : "gradientMove 3s ease infinite",
-          }}
-          onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (!loading) {
-              (e.currentTarget as HTMLElement).style.transform = "translateY(-4px) scale(1.02)";
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 12px 32px rgba(99, 102, 241, 0.5), 0 0 60px rgba(251, 191, 36, 0.4)";
-            }
-          }}
-          onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
-            if (!loading) {
-              (e.currentTarget as HTMLElement).style.transform = "translateY(0) scale(1)";
-              (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 24px rgba(99, 102, 241, 0.4), 0 0 40px rgba(251, 191, 36, 0.3)";
-            }
-          }}
-        >
-          {loading ? (
-            <>
-              <span style={{
+      <button
+        type="submit"
+        disabled={loading}
+        style={styles.button(loading)}
+        onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
+          if (!loading) {
+            e.currentTarget.style.background = "#1d4ed8";
+            e.currentTarget.style.transform = "translateY(-1px)";
+          }
+        }}
+        onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
+          if (!loading) {
+            e.currentTarget.style.background = "#2563eb";
+            e.currentTarget.style.transform = "translateY(0)";
+          }
+        }}
+      >
+        {loading ? (
+          <>
+            <span
+              style={{
                 display: "inline-block",
-                width: "20px",
-                height: "20px",
-                border: "3px solid rgba(255, 255, 255, 0.3)",
-                borderTop: "3px solid white",
+                width: "18px",
+                height: "18px",
+                border: "2px solid rgba(255, 255, 255, 0.3)",
+                borderTop: "2px solid white",
                 borderRadius: "50%",
                 animation: "spin 1s linear infinite",
-              }}></span>
-              <span>Création en cours...</span>
-            </>
-          ) : (
-            <>
-              <span>🚀</span>
-              <span>Créer mon compte Joueur</span>
-              <div style={styles.buttonShine} />
-            </>
-          )}
-        </button>
-      </form>
-    </>
+              }}
+            />
+            <span>Création…</span>
+          </>
+        ) : (
+          <span>Créer mon compte parent</span>
+        )}
+      </button>
+    </form>
   );
 }

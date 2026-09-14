@@ -6,6 +6,7 @@ import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
 import educatorApi from '@/api/educator/educator.api';
 import type { GameDTO, EtatJeu } from '@/api/types/api.types';
+import { difficultyFr } from '@/utils/frLabels';
 
 type DisplayGame = {
   id: number;
@@ -22,7 +23,7 @@ function mapGameDTO(dto: GameDTO): DisplayGame | null {
   const type = dto.typeJeu === 'QUIZ' ? 'quiz' : dto.typeJeu === 'MEMOIRE' ? 'memory' : null;
   if (!type) return null;
   const difficulty =
-    dto.difficulte === 1 ? 'Easy' : dto.difficulte === 2 ? 'Medium' : dto.difficulte === 3 ? 'Hard' : 'Medium';
+    dto.difficulte === 'FACILE' ? 'Easy' : dto.difficulte === 'DIFFICILE' ? 'Hard' : 'Medium';
   const ageRange =
     dto.ageMin != null && dto.ageMax != null ? `${dto.ageMin}-${dto.ageMax}` : dto.ageMin != null ? `${dto.ageMin}+` : '—';
   return {
@@ -32,7 +33,7 @@ function mapGameDTO(dto: GameDTO): DisplayGame | null {
     description: dto.description ?? '',
     difficulty,
     ageRange,
-    icon: dto.icone ?? '🎮',
+    icon: '🎮',
     etat: dto.etat,
   };
 }
@@ -123,8 +124,8 @@ export default function EducatorGames() {
       <div className="flex-1 overflow-auto pt-16">
         <div className="p-8">
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">My Games</h1>
-            <p className="text-gray-600">Games created by the admin. Configure Quiz (questions) or Memory (pairs) content here.</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Mes jeux</h1>
+            <p className="text-gray-600">Jeux créés par l&apos;admin. Configurez ici le contenu Quiz (questions) ou Mémoire (paires).</p>
           </div>
 
           {loading ? (
@@ -137,13 +138,13 @@ export default function EducatorGames() {
             </div>
           ) : !hasAny ? (
             <div className="bg-white rounded-xl p-8 border border-gray-100 text-center text-gray-600">
-              <p>No quiz or memory games yet. The admin must add a game first.</p>
+              <p>Aucun jeu quiz ou mémoire pour le moment. L&apos;admin doit d&apos;abord ajouter un jeu.</p>
             </div>
           ) : (
             <div className="space-y-10">
               {quizGames.length > 0 && (
                 <section>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Quiz games</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Jeux quiz</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {quizGames.map((game, index) => {
                       const questionCount = questionCounts[game.id] ?? 0;
@@ -156,7 +157,7 @@ export default function EducatorGames() {
                           className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow"
                         >
                           <div className="flex items-start justify-between mb-4">
-                            <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-teal-400 rounded-xl flex items-center justify-center text-2xl">
+                            <div className="w-12 h-12 bg-gradient-to-br from-sky-400 to-blue-500 rounded-xl flex items-center justify-center text-2xl">
                               {game.icon}
                             </div>
                             <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full">
@@ -168,17 +169,17 @@ export default function EducatorGames() {
                           <p className="text-sm text-gray-600 mb-4">{game.description}</p>
                           <div className="space-y-2 mb-4">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Difficulty:</span>
+                              <span className="text-gray-600">Difficulté :</span>
                               <span
                                 className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                   game.difficulty === 'Easy' ? 'bg-green-100 text-green-700' : game.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                                 }`}
                               >
-                                {game.difficulty}
+                                {difficultyFr(game.difficulty)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Age:</span>
+                              <span className="text-gray-600">Âge :</span>
                               <span className="font-medium text-gray-900">{game.ageRange}</span>
                             </div>
                           </div>
@@ -189,7 +190,7 @@ export default function EducatorGames() {
                               onClick={() => navigate(`/educator/games/quiz/${game.id}/questions`)}
                               className={`w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg hover:shadow-md transition-shadow ${
                                 game.etat === 'BROUILLON'
-                                  ? 'bg-gradient-to-r from-green-500 to-teal-500 text-white'
+                                  ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white'
                                   : 'bg-gray-100 text-gray-700 border border-gray-200'
                               }`}
                             >
@@ -206,7 +207,7 @@ export default function EducatorGames() {
 
               {memoryGames.length > 0 && (
                 <section>
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Memory games</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4">Jeux mémoire</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {memoryGames.map((game, index) => {
                       const pairCount = pairCounts[game.id] ?? 0;
@@ -224,24 +225,24 @@ export default function EducatorGames() {
                             </div>
                             <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 text-purple-700 rounded-full">
                               <Layers className="w-4 h-4" />
-                              <span className="text-sm font-medium">{pairCount} pairs</span>
+                              <span className="text-sm font-medium">{pairCount} paires</span>
                             </div>
                           </div>
                           <h3 className="text-lg font-bold text-gray-900 mb-2">{game.title}</h3>
                           <p className="text-sm text-gray-600 mb-4">{game.description}</p>
                           <div className="space-y-2 mb-4">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Difficulty:</span>
+                              <span className="text-gray-600">Difficulté :</span>
                               <span
                                 className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                   game.difficulty === 'Easy' ? 'bg-green-100 text-green-700' : game.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
                                 }`}
                               >
-                                {game.difficulty}
+                                {difficultyFr(game.difficulty)}
                               </span>
                             </div>
                             <div className="flex items-center justify-between text-sm">
-                              <span className="text-gray-600">Age:</span>
+                              <span className="text-gray-600">Âge :</span>
                               <span className="font-medium text-gray-900">{game.ageRange}</span>
                             </div>
                           </div>

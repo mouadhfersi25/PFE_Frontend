@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Users, Check, Clock, Copy, Link2 } from 'lucide-react';
+import { ArrowLeft, Users, Check, Clock, Copy, Link2, LogOut, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context';
 import { useAdminData } from '@/context';
 import PlayerHeaderActions from '@/components/player/PlayerHeaderActions';
@@ -9,6 +9,8 @@ import { PlayerQuizVariantChip } from '@/components/player/PlayerQuizVariant';
 import {
   getRoom,
   joinRoom,
+  leaveRoom,
+  forfeitRoom,
   setPlayerReady,
   setRoomStarted,
   subscribeRoom,
@@ -18,6 +20,7 @@ import {
   type RoomPlayer,
 } from '@/services/roomService';
 import { toast } from 'sonner';
+import { useRoomBeaconOnUnload } from '@/hooks/useRoomBeaconOnUnload';
 
 export default function WaitingRoom() {
   const navigate = useNavigate();
@@ -38,7 +41,6 @@ export default function WaitingRoom() {
       durationMinutes?: number;
       modeJeu?: 'INDIVIDUEL' | 'EN_LIGNE';
       quizVariant?: string;
-      quizPlayMode?: string;
     };
     mode?: string;
     roomCode?: string;
@@ -49,6 +51,52 @@ export default function WaitingRoom() {
 
   const [room, setRoom] = useState<Room | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [leaving, setLeaving] = useState(false);
+
+  // Avant le début : fermer l'onglet libère la place (et l'hôte est réassigné si besoin).
+  // Une fois la partie démarrée (countdown en cours), fermer l'onglet compte comme un abandon.
+  useRoomBeaconOnUnload(Boolean(roomCodeFromUrl), roomCodeFromUrl, room?.startedAt ? 'forfeit' : 'leave');
+
+  // Toute sortie de cette page compte comme quitter la salle (flèche retour, bouton retour du
+  // navigateur, clic sur un lien du menu...) — sauf la transition normale vers la partie
+  // (countdown terminé) ou un clic explicite sur "Quitter" (déjà traités immédiatement par
+  // ailleurs, `enteringGameRef`/`hasExplicitlyLeftRef` évitent alors un appel en double).
+  const roomCodeRef = useRef(roomCodeFromUrl);
+  const roomStartedRef = useRef(false);
+  const enteringGameRef = useRef(false);
+  const hasExplicitlyLeftRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    roomCodeRef.current = roomCodeFromUrl;
+  }, [roomCodeFromUrl]);
+
+  useEffect(() => {
+    roomStartedRef.current = Boolean(room?.startedAt);
+  }, [room?.startedAt]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  });
+
+  useEffect(() => {
+    return () => {
+      if (enteringGameRef.current || hasExplicitlyLeftRef.current) return;
+      const code = roomCodeRef.current;
+      if (!code) return;
+      // Délai différé : distingue un vrai démontage d'un simple double-rendu de développement
+      // (React StrictMode monte/démonte/remonte chaque effet une fois en dev) — si le composant
+      // est remonté avant que ce délai s'écoule, isMountedRef repasse à true entre-temps.
+      setTimeout(() => {
+        if (isMountedRef.current) return;
+        if (roomStartedRef.current) void forfeitRoom(code);
+        else void leaveRoom(code);
+      }, 0);
+    };
+  }, []);
 
   const currentPlayerId = String(playerProfile?.id ?? 'guest');
   const currentPlayerName = playerProfile?.name ?? 'Joueur';
@@ -69,7 +117,7 @@ export default function WaitingRoom() {
     const bootstrap = async () => {
       const r = await getRoom(roomCodeFromUrl);
       if (!r) {
-        toast.error('Room introuvable');
+        toast.error('Salle introuvable');
         navigate('/player/new-game', { state: { mode: 'Online' } });
         return;
       }
@@ -80,7 +128,7 @@ export default function WaitingRoom() {
         age: playerProfile?.age,
       });
       if (!joinedRoom) {
-        toast.error(`Room complète (${MAX_ROOM_PLAYERS} joueurs max)`);
+        toast.error(`Salle complète (${MAX_ROOM_PLAYERS} joueurs max)`);
         navigate('/player/new-game', { state: { mode: 'Online' } });
         return;
       }
@@ -123,6 +171,7 @@ export default function WaitingRoom() {
 
   useEffect(() => {
     if (countdown !== 0 || !game) return;
+    enteringGameRef.current = true;
     navigate(`/player/game/${game.type}/${gameId}`, {
       state: {
         game,
@@ -145,11 +194,25 @@ export default function WaitingRoom() {
       if (result.reason === 'NOT_ALL_READY') toast.error("Tous les joueurs doivent être prêts");
       else if (result.reason === 'MIN_ONLINE_PLAYERS_REQUIRED') toast.error("Il faut au moins 2 adversaires pour lancer la partie");
       else if (result.reason === 'HOST_ONLY') toast.error("Seul l'hôte peut démarrer");
-      else toast.error("Room invalide ou expirée");
+      else toast.error('Salle invalide ou expirée');
       return;
     }
     setCountdown(3);
     await refreshRoom();
+  };
+
+  const handleLeave = async () => {
+    if (leaving) return;
+    if (!window.confirm('Es-tu sûr de vouloir quitter la salle ?')) return;
+    setLeaving(true);
+    hasExplicitlyLeftRef.current = true;
+    try {
+      if (roomCodeFromUrl) await leaveRoom(roomCodeFromUrl);
+      toast.success('Tu as quitté la salle');
+      navigate('/player/new-game', { state: { mode: 'Online' } });
+    } finally {
+      setLeaving(false);
+    }
   };
 
   const shareLink = roomCodeFromUrl ? getShareLink(gameId!, roomCodeFromUrl) : '';
@@ -172,14 +235,15 @@ export default function WaitingRoom() {
             <motion.button
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              onClick={() => navigate('/player/new-game')}
-              className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              onClick={handleLeave}
+              disabled={leaving}
+              className="p-2 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-60"
             >
               <ArrowLeft className="w-6 h-6 text-white" />
             </motion.button>
             <div>
               <h1 className="text-2xl font-bold text-white">Salle d’attente</h1>
-              <p className="text-sm text-slate-300">Solo en ligne · contre adversaires — {game.title}</p>
+              <p className="text-sm text-slate-300">Multijoueur · contre adversaires — {game.title}</p>
             </div>
           </div>
           <PlayerHeaderActions />
@@ -213,7 +277,7 @@ export default function WaitingRoom() {
           >
             <div className="flex items-center gap-2 mb-2">
               <Link2 className="w-5 h-5 text-purple-600" />
-              <h3 className="font-bold text-white">Code de la room</h3>
+              <h3 className="font-bold text-white">Code de la salle</h3>
             </div>
             <div className="flex items-center gap-4 flex-wrap">
               <span className="text-3xl font-mono font-bold tracking-widest text-purple-600 bg-purple-50 px-4 py-2 rounded-xl">
@@ -230,7 +294,7 @@ export default function WaitingRoom() {
               </motion.button>
             </div>
             <p className="text-sm text-slate-300 mt-2">
-              Envoie ce code ou le lien à tes adversaires pour qu’ils rejoignent la room.
+              Envoie ce code ou le lien à tes adversaires pour qu’ils rejoignent la salle.
             </p>
           </motion.div>
         )}
@@ -276,7 +340,7 @@ export default function WaitingRoom() {
         >
           <div className="flex items-center gap-2 mb-6">
             <Users className="w-5 h-5 text-slate-200" />
-            <h3 className="text-xl font-bold text-white">Joueurs dans la room</h3>
+            <h3 className="text-xl font-bold text-white">Joueurs dans la salle</h3>
             <span className="ml-auto text-sm text-slate-300">
               {room?.players.filter((p) => p.ready).length ?? 0} / {room?.players.length ?? 0} prêts
             </span>
@@ -367,6 +431,19 @@ export default function WaitingRoom() {
                   ? 'En attente que tout le monde soit prêt...'
                   : 'En attente du démarrage par l’hôte...'}
             </div>
+          )}
+
+          {!room?.startedAt && (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleLeave}
+              disabled={leaving}
+              className="shrink-0 flex items-center justify-center gap-2 px-5 py-4 rounded-xl font-semibold border border-white/20 bg-white/5 text-slate-200 hover:bg-rose-500/15 hover:border-rose-400/40 hover:text-rose-200 transition-colors disabled:opacity-60"
+            >
+              {leaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+              Quitter
+            </motion.button>
           )}
         </motion.div>
       </div>

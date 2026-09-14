@@ -15,17 +15,21 @@ export function getErrorMessage(
 
     switch (status) {
       case 400: return "Données invalides";
-      case 401: return "Email ou mot de passe incorrect";
+      case 401: return "E-mail ou mot de passe incorrect";
       case 403: return "Accès refusé";
       case 404: return "Service non trouvé";
-      case 409: return "Cet email est déjà utilisé";
+      case 409: return "Cet e-mail est déjà utilisé";
       case 500: return "Erreur serveur. Veuillez réessayer plus tard";
       default: return `Erreur ${status}`;
     }
   }
 
   if (e?.request) {
-    return "Impossible de contacter le serveur. Vérifiez votre connexion internet.";
+    const msg = (e.message || "").toLowerCase();
+    if (msg.includes("timeout") || (e as { code?: string }).code === "ECONNABORTED") {
+      return "Le serveur met trop de temps à répondre. Vérifiez que le backend tourne sur le port 8081.";
+    }
+    return "Impossible de contacter le serveur (http://localhost:8081). Démarrez le backend puis réessayez.";
   }
 
   return e?.message || defaultMessage;

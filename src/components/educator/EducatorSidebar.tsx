@@ -14,13 +14,13 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
-    name: 'Dashboard',
+    name: 'Tableau de bord',
     path: '/educator/dashboard',
     icon: <LayoutDashboard className="w-5 h-5" />,
     section: 'overview',
   },
   {
-    name: 'Manage Games',
+    name: 'Gérer les jeux',
     path: '/educator/games/manage',
     icon: <Gamepad2 className="w-5 h-5" />,
     section: 'content',
@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
     icon: <HelpCircle className="w-5 h-5" />,
     section: 'games',
     badge: '🧮',
-    badgeColor: 'bg-green-100 text-green-700',
+    badgeColor: 'bg-slate-100 text-slate-700',
   },
   {
     name: 'Mémoire',
@@ -47,7 +47,7 @@ const navItems: NavItem[] = [
     icon: <Brain className="w-5 h-5" />,
     section: 'games',
     badge: '🧠',
-    badgeColor: 'bg-purple-100 text-purple-700',
+    badgeColor: 'bg-violet-100 text-violet-700',
   },
   {
     name: 'Réflexe',
@@ -55,7 +55,7 @@ const navItems: NavItem[] = [
     icon: <Zap className="w-5 h-5" />,
     section: 'games',
     badge: '⚡',
-    badgeColor: 'bg-yellow-100 text-yellow-700',
+    badgeColor: 'bg-amber-100 text-amber-700',
   },
   {
     name: 'Logique',
@@ -63,10 +63,10 @@ const navItems: NavItem[] = [
     icon: <Puzzle className="w-5 h-5" />,
     section: 'games',
     badge: '🎯',
-    badgeColor: 'bg-blue-100 text-blue-700',
+    badgeColor: 'bg-emerald-100 text-emerald-700',
   },
   {
-    name: 'Learning Statistics',
+    name: 'Statistiques d’apprentissage',
     path: '/educator/statistics',
     icon: <BarChart3 className="w-5 h-5" />,
     section: 'insights',
@@ -81,7 +81,7 @@ export default function EducatorSidebar() {
   const email = user?.email ?? '';
   const displayName =
     user?.name ||
-    (email ? email.split('@')[0].replace(/\./g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Educator');
+    (email ? email.split('@')[0].replace(/\./g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Éducateur');
 
   const initials = displayName
     .split(' ')
@@ -95,22 +95,23 @@ export default function EducatorSidebar() {
     navigate('/login');
   };
 
+  const sectionLabel = 'px-3 mb-1 text-[11px] font-semibold tracking-wide text-sky-700/70 uppercase';
+  const navActive = 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-sm';
+  const navIdle = 'text-slate-600 hover:bg-sky-50 hover:text-slate-900';
+
   return (
-    <div className="sticky top-0 w-64 h-screen bg-gradient-to-b from-emerald-50 via-white to-teal-50/40 border-r border-gray-200 flex flex-col shrink-0">
-      {/* Brand */}
+    <div className="sticky top-0 w-64 h-screen bg-gradient-to-b from-sky-50 via-white to-blue-50/40 border-r border-sky-100 flex flex-col shrink-0">
       <div className="p-6 shrink-0">
         <div className="flex items-center gap-3">
           <div className="min-w-0">
-            <h2 className="font-bold text-gray-900">Educator Panel</h2>
-            <p className="text-xs text-gray-500">Create questions & manage games</p>
+            <h2 className="font-bold text-slate-900">Espace éducateur</h2>
+            <p className="text-xs text-slate-500">Créer des questions et gérer les jeux</p>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 min-h-0 px-3 overflow-y-auto py-2">
-        {/* Overview */}
-        <p className="px-3 mb-1 text-[11px] font-semibold tracking-wide text-emerald-700/80 uppercase">Overview</p>
+        <p className={sectionLabel}>Vue d’ensemble</p>
         {navItems
           .filter((item) => item.section === 'overview')
           .map((item) => {
@@ -119,10 +120,8 @@ export default function EducatorSidebar() {
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ x: 4 }}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg mb-2 transition-colors ${
-                    isActive
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                      : 'text-gray-700 hover:bg-emerald-50'
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl mb-1.5 transition-colors ${
+                    isActive ? navActive : navIdle
                   }`}
                 >
                   {item.icon}
@@ -132,10 +131,7 @@ export default function EducatorSidebar() {
             );
           })}
 
-        {/* Content management */}
-        <p className="px-3 mt-1 mb-1 text-[11px] font-semibold tracking-wide text-emerald-700/80 uppercase">
-          Gestion
-        </p>
+        <p className={`px-3 mt-2 ${sectionLabel}`}>Gestion</p>
         {navItems
           .filter((item) => item.section === 'content')
           .map((item) => {
@@ -144,10 +140,8 @@ export default function EducatorSidebar() {
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ x: 4 }}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg mb-1 transition-colors ${
-                    isActive
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                      : 'text-gray-700 hover:bg-emerald-50'
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl mb-1 transition-colors ${
+                    isActive ? navActive : navIdle
                   }`}
                 >
                   {item.icon}
@@ -157,10 +151,7 @@ export default function EducatorSidebar() {
             );
           })}
 
-        {/* Atelier oral */}
-        <p className="px-3 mt-3 mb-1 text-[11px] font-semibold tracking-wide text-emerald-700/80 uppercase">
-          Atelier oral
-        </p>
+        <p className={`px-3 mt-3 ${sectionLabel}`}>Atelier oral</p>
         {navItems
           .filter((item) => item.section === 'oral')
           .map((item) => {
@@ -169,10 +160,8 @@ export default function EducatorSidebar() {
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ x: 4 }}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${
-                    isActive
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                      : 'text-gray-700 hover:bg-emerald-50'
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 transition-colors ${
+                    isActive ? navActive : navIdle
                   }`}
                 >
                   {item.icon}
@@ -189,10 +178,7 @@ export default function EducatorSidebar() {
             );
           })}
 
-        {/* Game types */}
-        <p className="px-3 mt-3 mb-1 text-[11px] font-semibold tracking-wide text-emerald-700/80 uppercase">
-          Types de jeux
-        </p>
+        <p className={`px-3 mt-3 ${sectionLabel}`}>Types de jeux</p>
         {navItems
           .filter((item) => item.section === 'games')
           .map((item) => {
@@ -201,10 +187,8 @@ export default function EducatorSidebar() {
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ x: 4 }}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${
-                    isActive
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                      : 'text-gray-700 hover:bg-emerald-50'
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 transition-colors ${
+                    isActive ? navActive : navIdle
                   }`}
                 >
                   {item.icon}
@@ -221,9 +205,7 @@ export default function EducatorSidebar() {
             );
           })}
 
-
-        {/* Insights */}
-        <p className="px-3 mt-1 mb-1 text-[11px] font-semibold tracking-wide text-emerald-700/80 uppercase">Insights</p>
+        <p className={`px-3 mt-2 ${sectionLabel}`}>Analyses</p>
         {navItems
           .filter((item) => item.section === 'insights')
           .map((item) => {
@@ -232,10 +214,8 @@ export default function EducatorSidebar() {
               <Link key={item.path} to={item.path}>
                 <motion.div
                   whileHover={{ x: 4 }}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-lg mb-1 transition-colors ${
-                    isActive
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                      : 'text-gray-700 hover:bg-emerald-50'
+                  className={`flex items-center gap-3 px-3 py-3 rounded-xl mb-1 transition-colors ${
+                    isActive ? navActive : navIdle
                   }`}
                 >
                   {item.icon}
@@ -246,21 +226,20 @@ export default function EducatorSidebar() {
           })}
       </nav>
 
-      {/* Educator profile / logout */}
-      <div className="shrink-0 p-3 border-t border-gray-200">
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+      <div className="shrink-0 p-3 border-t border-sky-100">
+        <div className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sky-50 transition-colors">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-sm truncate">{displayName}</p>
-            <p className="text-xs text-gray-500">Educator</p>
+            <p className="font-semibold text-slate-900 text-sm truncate">{displayName}</p>
+            <p className="text-xs text-slate-500">Éducateur</p>
           </div>
           <button
             type="button"
             onClick={handleLogout}
-            className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-            title="Log out"
+            className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+            title="Déconnexion"
           >
             <LogOut className="w-4 h-4" />
           </button>

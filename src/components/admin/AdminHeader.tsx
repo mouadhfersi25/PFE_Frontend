@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Globe, Bell, Settings, LogOut, Check, X, Gamepad2, Loader2 } from 'lucide-react';
+import { Globe, Bell, Settings, LogOut, Check, X, Gamepad2, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/context';
 import storage from '@/utils/storage';
 import { userService } from '@/services/user.service';
@@ -17,8 +17,11 @@ export default function AdminHeader() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileName, setProfileName] = useState<{ prenom: string; nom: string }>({ prenom: '', nom: '' });
   const [pendingGames, setPendingGames] = useState<GameDTO[]>([]);
+  const [reactivationGames, setReactivationGames] = useState<GameDTO[]>([]);
   const [updatingStatusId, setUpdatingStatusId] = useState<number | null>(null);
   const [rejectingGame, setRejectingGame] = useState<GameDTO | null>(null);
+  const [updatingReactivationId, setUpdatingReactivationId] = useState<number | null>(null);
+  const [rejectingReactivationGame, setRejectingReactivationGame] = useState<GameDTO | null>(null);
 
   const avatarRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -60,8 +63,10 @@ export default function AdminHeader() {
     try {
       const res = await adminApi.getGames();
       if (Array.isArray(res.data)) {
-        const pending = (res.data as GameDTO[]).filter(g => g.etat === 'EN_ATTENTE');
-        setPendingGames(pending);
+        const games = res.data as GameDTO[];
+        setPendingGames(games.filter(g => g.etat === 'EN_ATTENTE'));
+        // Jeux corrigés par l'éducateur après désactivation, en attente de validation de réactivation.
+        setReactivationGames(games.filter(g => g.reactivationPending));
       }
     } catch (err) {
       console.error("Failed to fetch pending games", err);
@@ -122,6 +127,34 @@ export default function AdminHeader() {
     }
   };
 
+  const handleAcceptReactivation = async (gameId: number) => {
+    setUpdatingReactivationId(gameId);
+    try {
+      await adminApi.acceptReactivation(gameId);
+      toast.success('Jeu réactivé — l\'éducateur a été notifié');
+      setReactivationGames(prev => prev.filter(g => g.id !== gameId));
+    } catch (err) {
+      toast.error("Erreur lors de la réactivation du jeu");
+    } finally {
+      setUpdatingReactivationId(null);
+    }
+  };
+
+  const submitRejectReactivation = async (reason: string) => {
+    if (!rejectingReactivationGame) return;
+    setUpdatingReactivationId(rejectingReactivationGame.id);
+    try {
+      await adminApi.rejectReactivation(rejectingReactivationGame.id, reason);
+      toast.success('Demande de réactivation refusée — l\'éducateur a été notifié');
+      setReactivationGames(prev => prev.filter(g => g.id !== rejectingReactivationGame.id));
+      setRejectingReactivationGame(null);
+    } catch {
+      toast.error("Erreur lors du refus de la réactivation");
+    } finally {
+      setUpdatingReactivationId(null);
+    }
+  };
+
   const handleNavigateToGame = (gameId: number) => {
     setNotificationsOpen(false);
     navigate(`/admin/games/${gameId}`);
@@ -169,7 +202,7 @@ export default function AdminHeader() {
               title="Notifications"
             >
               <Bell className="w-5 h-5" />
-              {pendingGames.length > 0 && (
+              {(pendingGames.length + reactivationGames.length) > 0 && (
                 <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-rose-500 border-2 border-white rounded-full" />
               )}
             </button>
@@ -182,25 +215,70 @@ export default function AdminHeader() {
               >
                 <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between shrink-0">
                   <span className="font-semibold text-slate-900">Notifications</span>
-                  {pendingGames.length > 0 && (
+                  {(pendingGames.length + reactivationGames.length) > 0 && (
                     <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-600 text-xs font-bold">
-                      {pendingGames.length}
+                      {pendingGames.length + reactivationGames.length}
                     </span>
                   )}
                 </div>
 
                 <div className="overflow-y-auto custom-scrollbar">
-                  {pendingGames.length === 0 ? (
+                  {(pendingGames.length + reactivationGames.length) === 0 ? (
                     <div className="p-6 text-center text-slate-500 text-sm">
                       Aucune nouvelle notification.
                     </div>
                   ) : (
+                    <>
+                    {reactivationGames.length > 0 && (
+                      <div className="divide-y divide-slate-50 border-b border-slate-100">
+                        {reactivationGames.map(game => (
+                          <div key={`reactivation-${game.id}`} className="p-4 hover:bg-slate-50 transition-colors">
+                            <div className="flex gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center shrink-0">
+                                <RefreshCw className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleNavigateToGame(game.id)}
+                                  className="text-left w-full"
+                                >
+                                  <p className="text-sm font-medium text-slate-900 truncate">{game.titre}</p>
+                                  <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">
+                                    Demande de réactivation après correction par l'éducateur.
+                                  </p>
+                                </button>
+
+                                <div className="flex items-center gap-2 mt-3">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setRejectingReactivationGame(game); }}
+                                    disabled={updatingReactivationId === game.id}
+                                    className="flex-1 px-2 py-1.5 text-xs font-semibold bg-rose-50 text-rose-600 rounded-lg border border-rose-200 hover:bg-rose-100 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                                  >
+                                    {updatingReactivationId === game.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                                    Refuser
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleAcceptReactivation(game.id); }}
+                                    disabled={updatingReactivationId === game.id}
+                                    className="flex-1 px-2 py-1.5 text-xs font-semibold bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1 disabled:opacity-50"
+                                  >
+                                    {updatingReactivationId === game.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                    Accepter
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="divide-y divide-slate-50">
                       {pendingGames.map(game => (
                         <div key={game.id} className="p-4 hover:bg-slate-50 transition-colors">
                           <div className="flex gap-3">
                             <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
-                              {game.icone || <Gamepad2 className="w-4 h-4" />}
+                              <Gamepad2 className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <button
@@ -235,6 +313,7 @@ export default function AdminHeader() {
                         </div>
                       ))}
                     </div>
+                    </>
                   )}
                 </div>
               </motion.div>
@@ -267,7 +346,7 @@ export default function AdminHeader() {
                     className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
                   >
                     <Settings className="w-4 h-4 text-slate-500" />
-                    Settings
+                    Paramètres
                   </Link>
 
                   <button
@@ -276,7 +355,7 @@ export default function AdminHeader() {
                     className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-left text-slate-700 hover:bg-rose-50 hover:text-rose-700 transition-colors"
                   >
                     <LogOut className="w-4 h-4 text-slate-500" />
-                    Log out
+                    Déconnexion
                   </button>
                 </div>
               </motion.div>
@@ -290,6 +369,16 @@ export default function AdminHeader() {
         submitting={rejectingGame != null && updatingStatusId === rejectingGame.id}
         onClose={() => setRejectingGame(null)}
         onConfirm={submitReject}
+      />
+      <RejectGameModal
+        open={!!rejectingReactivationGame}
+        gameTitle={rejectingReactivationGame?.titre}
+        submitting={rejectingReactivationGame != null && updatingReactivationId === rejectingReactivationGame.id}
+        title="Refuser la réactivation du jeu"
+        placeholder="Ex: Le contenu signalé n'a pas été suffisamment corrigé..."
+        confirmLabel="Confirmer le refus de réactivation"
+        onClose={() => setRejectingReactivationGame(null)}
+        onConfirm={submitRejectReactivation}
       />
     </header>
   );

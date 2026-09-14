@@ -69,9 +69,9 @@ export default function Statistics() {
       <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white/70 p-4 md:p-5 mb-5 shadow-sm">
         <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 mb-3 border border-slate-200">
           <TrendingUp className="w-4 h-4 text-violet-600" />
-          Global Statistics
+          Statistiques globales
         </div>
-        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Global Statistics</h1>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Statistiques globales</h1>
       </div>
 
       {loading ? (
@@ -86,7 +86,7 @@ export default function Statistics() {
             className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Game Performance Metrics</h2>
+              <h2 className="text-lg font-bold text-gray-900">Performances des jeux</h2>
               <Gamepad2 className="w-5 h-5 text-gray-400" />
             </div>
             {gameStats.length === 0 ? (
@@ -115,7 +115,7 @@ export default function Statistics() {
             className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-gray-900">Performance by Age Group</h2>
+              <h2 className="text-lg font-bold text-gray-900">Performance par tranche d&apos;âge</h2>
               <Users className="w-5 h-5 text-gray-400" />
             </div>
             {ageGroupStats.every((a) => a.players === 0) ? (
@@ -145,11 +145,11 @@ export default function Statistics() {
             <div className="flex justify-center gap-6 mt-4">
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-orange-500 rounded-full" />
-                <span className="text-sm text-gray-600">Avg Score</span>
+                <span className="text-sm text-gray-600">Score moyen</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                <span className="text-sm text-gray-600">Players</span>
+                <span className="text-sm text-gray-600">Joueurs</span>
               </div>
             </div>
           </motion.div>
@@ -167,7 +167,7 @@ export default function Statistics() {
                   ? `${metrics.overallCompletionRatePercent.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`
                   : '—'}
               </h3>
-              <p className="text-sm opacity-90">Overall Completion Rate</p>
+              <p className="text-sm opacity-90">Taux de complétion global</p>
             </motion.div>
 
             <motion.div
@@ -180,7 +180,7 @@ export default function Statistics() {
               <h3 className="text-3xl font-bold mb-2">
                 {metrics != null ? metrics.activePlayers.toLocaleString('fr-FR') : '—'}
               </h3>
-              <p className="text-sm opacity-90">Active Players (30 j.)</p>
+              <p className="text-sm opacity-90">Joueurs actifs (30 j.)</p>
             </motion.div>
 
             <motion.div
@@ -193,7 +193,7 @@ export default function Statistics() {
               <h3 className="text-3xl font-bold mb-2">
                 {metrics != null ? formatMinutesToHourMin(metrics.avgPlaytimeMinutesPerUser) : '—'}
               </h3>
-              <p className="text-sm opacity-90">Avg Playtime/User</p>
+              <p className="text-sm opacity-90">Temps de jeu moyen / joueur</p>
             </motion.div>
           </div>
         </>

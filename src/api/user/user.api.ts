@@ -1,6 +1,6 @@
 // User API
 import api from "../config/axiosConfig";
-import { USER_ENDPOINTS } from "../config/endpoints";
+import { PLAYER_AD_ENDPOINTS, USER_ENDPOINTS } from "../config/endpoints";
 import type {
   PlayerOnboardingRequest,
   ReflexSettingsDTO,
@@ -27,11 +27,21 @@ import type {
   CreateRoomRequest,
   JoinRoomRequest,
   LinkedChildProfileDTO,
+  PlayerAdDTO,
 } from "../types/api.types";
 
 const userApi = {
   getMe: () => api.get(USER_ENDPOINTS.ME),
   getLinkedChildren: () => api.get<LinkedChildProfileDTO[]>(USER_ENDPOINTS.LINKED_CHILDREN),
+  createLinkedChild: (data: {
+    nom: string;
+    prenom: string;
+    email: string;
+    password: string;
+    dateDeNaissance: string;
+    telephone?: string;
+    genre: 'HOMME' | 'FEMME';
+  }) => api.post<LinkedChildProfileDTO>(USER_ENDPOINTS.LINKED_CHILDREN, data),
   getLinkedChildHistory: (childId: number | string) =>
     api.get<PlayerHistorySessionDTO[]>(USER_ENDPOINTS.LINKED_CHILD_HISTORY(childId)),
   getLinkedChildBadges: (childId: number | string) =>
@@ -62,18 +72,37 @@ const userApi = {
   createRoom: (data: CreateRoomRequest) => api.post<RealtimeRoomStateDTO>(USER_ENDPOINTS.ROOMS_CREATE, data),
   joinRoom: (data: JoinRoomRequest) => api.post<RealtimeRoomStateDTO>(USER_ENDPOINTS.ROOMS_JOIN, data),
   getRoom: (roomCode: string) => api.get<RealtimeRoomStateDTO>(USER_ENDPOINTS.ROOM_BY_CODE(roomCode)),
+  listAvailableRooms: (gameId?: number | string) =>
+    api.get<RealtimeRoomStateDTO[]>(USER_ENDPOINTS.ROOMS_AVAILABLE, {
+      params: gameId != null ? { gameId } : undefined,
+    }),
   getRoomResult: (roomCode: string, gameId: number | string) =>
     api.get<CompetitiveRoomResultDTO>(USER_ENDPOINTS.ROOM_RESULT(roomCode, gameId)),
   setRoomReady: (roomCode: string, ready: boolean) =>
     api.patch<RealtimeRoomStateDTO>(USER_ENDPOINTS.ROOM_READY(roomCode), { ready }),
   startRoom: (roomCode: string) =>
     api.post<RealtimeRoomStateDTO>(USER_ENDPOINTS.ROOM_START(roomCode), {}),
+  leaveRoom: (roomCode: string) =>
+    api.post<void>(USER_ENDPOINTS.ROOM_LEAVE(roomCode), {}),
+  forfeitRoom: (roomCode: string) =>
+    api.post<void>(USER_ENDPOINTS.ROOM_FORFEIT(roomCode), {}),
   getQuizQuestionsByGame: (gameId: number | string) =>
     api.get<QuizQuestionDTO[]>(USER_ENDPOINTS.GAME_QUIZ_QUESTIONS(gameId)),
   getMemoryCardsByGame: (gameId: number | string) =>
     api.get<MemoryCardDTO[]>(USER_ENDPOINTS.GAME_MEMORY_CARDS(gameId)),
   getLogicPuzzlesByGame: (gameId: number | string) =>
     api.get<LogicPuzzleDTO[]>(USER_ENDPOINTS.GAME_LOGIC_PUZZLES(gameId)),
+  getActiveAd: (jeuId: number | string) =>
+    api.get<PlayerAdDTO>(PLAYER_AD_ENDPOINTS.ACTIVE, { params: { jeuId } }),
+  recordAdInteraction: (
+    adId: number | string,
+    typeInteraction: 'VIEW' | 'CLICK',
+    sessionId?: number | null
+  ) =>
+    api.post(PLAYER_AD_ENDPOINTS.INTERACTION(adId), {
+      typeInteraction,
+      sessionId: sessionId ?? null,
+    }),
 };
 
 export default userApi;

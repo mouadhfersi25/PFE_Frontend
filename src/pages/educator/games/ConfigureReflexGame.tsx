@@ -7,6 +7,7 @@ import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
 import educatorApi from '@/api/educator/educator.api';
 import type { GameDTO } from '@/api/types/api.types';
+import { canEditGameContent } from '@/utils/gameEditPolicy';
 
 const STIMULI_OPTIONS = [
   { value: 'TARGET_ICON', label: "Cible icône (classique)" },
@@ -16,8 +17,8 @@ const STIMULI_OPTIONS = [
 
 const MODEL_OPTIONS = [
   { value: 'CLASSIC', label: 'Classique' },
-  { value: 'GO_NO_GO', label: 'Go / No-Go' },
-  { value: 'CHOICE_REACTION', label: 'Choice Reaction' },
+  { value: 'GO_NO_GO', label: 'Aller / Ne pas aller' },
+  { value: 'CHOICE_REACTION', label: 'Réaction à choix' },
   { value: 'STROOP_INVERSE', label: 'Stroop inverse' },
 ];
 
@@ -115,7 +116,7 @@ export default function ConfigureReflexGame() {
     return () => { cancelled = true; };
   }, [id]);
 
-  const canEdit = game?.etat === 'BROUILLON' || game?.etat === 'REFUSE';
+  const canEdit = canEditGameContent(game);
 
   const stimulusOptions = useMemo(() => {
     if (!usesStimulusTypeField(modeleReflexe)) return [];
@@ -153,7 +154,7 @@ export default function ConfigureReflexGame() {
       return;
     }
     if (modeleReflexe === 'GO_NO_GO' && (noGoRatio === '' || noGoRatio < 10 || noGoRatio > 90)) {
-      toast.error('Le ratio No-Go doit être entre 10% et 90%');
+      toast.error('Le ratio « ne pas aller » doit être entre 10% et 90%');
       return;
     }
     if (modeleReflexe === 'CHOICE_REACTION' && (choiceTargetCount === '' || choiceTargetCount < 2 || choiceTargetCount > 6)) {
@@ -190,7 +191,7 @@ export default function ConfigureReflexGame() {
         <EducatorSidebar />
         <EducatorHeader />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
         </div>
       </motion.div>
     );
@@ -203,7 +204,7 @@ export default function ConfigureReflexGame() {
         <EducatorHeader />
         <div className="flex-1 flex items-center justify-center">
           <p className="text-gray-600">{error ?? 'Jeu introuvable'}</p>
-          <button type="button" onClick={() => navigate('/educator/games/manage')} className="ml-4 text-emerald-600 hover:underline">
+          <button type="button" onClick={() => navigate('/educator/games/manage')} className="ml-4 text-sky-600 hover:underline">
             Retour aux jeux
           </button>
         </div>
@@ -219,11 +220,11 @@ export default function ConfigureReflexGame() {
         <div className="p-6 md:p-8 max-w-3xl">
           <button
             type="button"
-            onClick={() => navigate('/educator/games/manage')}
+            onClick={() => navigate(`/educator/games/manage/${id}/edit`)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 mb-5 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            Retour aux jeux
+            Retour aux infos du jeu
           </button>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm mb-6">
@@ -245,8 +246,9 @@ export default function ConfigureReflexGame() {
 
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-5">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Modèle Réflexe</label>
+              <label htmlFor="reflex-modele" className="block text-sm font-semibold text-gray-700 mb-2">Modèle Réflexe</label>
               <select
+                id="reflex-modele"
                 disabled={!canEdit}
                 value={modeleReflexe}
                 onChange={(e) => {
@@ -275,11 +277,12 @@ export default function ConfigureReflexGame() {
 
             {usesStimulusTypeField(modeleReflexe) && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Type de stimuli</label>
+                <label htmlFor="reflex-typeStimuli" className="block text-sm font-semibold text-gray-700 mb-2">Type de stimuli</label>
                 <p className="text-xs text-gray-500 mb-2">
-                  S’applique à la cible unique (Classique et Go / No-Go). Les trois options sont valables pour ces modèles.
+                  S’applique à la cible unique (Classique et Aller / Ne pas aller). Les trois options sont valables pour ces modèles.
                 </p>
                 <select
+                  id="reflex-typeStimuli"
                   disabled={!canEdit}
                   value={typeStimuli}
                   onChange={(e) => setTypeStimuli(e.target.value)}
@@ -297,8 +300,9 @@ export default function ConfigureReflexGame() {
 
             {modeleReflexe === 'GO_NO_GO' && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Ratio No-Go (%)</label>
+                <label htmlFor="reflex-noGoRatio" className="block text-sm font-semibold text-gray-700 mb-2">Ratio « ne pas aller » (%)</label>
                 <input
+                  id="reflex-noGoRatio"
                   type="number"
                   min={10}
                   max={90}
@@ -313,8 +317,9 @@ export default function ConfigureReflexGame() {
 
             {modeleReflexe === 'CHOICE_REACTION' && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre de choix visibles</label>
+                <label htmlFor="reflex-choiceTargetCount" className="block text-sm font-semibold text-gray-700 mb-2">Nombre de choix visibles</label>
                 <input
+                  id="reflex-choiceTargetCount"
                   type="number"
                   min={2}
                   max={6}
@@ -328,8 +333,9 @@ export default function ConfigureReflexGame() {
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Nombre de rounds</label>
+              <label htmlFor="reflex-nombreRounds" className="block text-sm font-semibold text-gray-700 mb-2">Nombre de rounds</label>
               <input
+                id="reflex-nombreRounds"
                 type="number"
                 min={1}
                 max={30}
@@ -342,8 +348,9 @@ export default function ConfigureReflexGame() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Temps réaction max (ms)</label>
+              <label htmlFor="reflex-tempsReactionMaxMs" className="block text-sm font-semibold text-gray-700 mb-2">Temps réaction max (ms)</label>
               <input
+                id="reflex-tempsReactionMaxMs"
                 type="number"
                 min={500}
                 max={5000}
@@ -357,8 +364,9 @@ export default function ConfigureReflexGame() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Difficulté gameplay (0-10)</label>
+              <label htmlFor="reflex-difficulte" className="block text-sm font-semibold text-gray-700 mb-2">Difficulté gameplay (0-10)</label>
               <input
+                id="reflex-difficulte"
                 type="number"
                 min={0}
                 max={10}

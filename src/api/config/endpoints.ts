@@ -30,11 +30,14 @@ export const USER_ENDPOINTS = {
   LEADERBOARD_ME_RANKS: "/users/leaderboard/me/ranks",
   ROOMS_CREATE: "/users/rooms/create",
   ROOMS_JOIN: "/users/rooms/join",
+  ROOMS_AVAILABLE: "/users/rooms/available",
   ROOM_BY_CODE: (roomCode: string) => `/users/rooms/${roomCode}`,
   ROOM_RESULT: (roomCode: string, gameId: number | string) =>
     `/users/rooms/${roomCode}/result?gameId=${encodeURIComponent(String(gameId))}`,
   ROOM_READY: (roomCode: string) => `/users/rooms/${roomCode}/ready`,
   ROOM_START: (roomCode: string) => `/users/rooms/${roomCode}/start`,
+  ROOM_LEAVE: (roomCode: string) => `/users/rooms/${roomCode}/leave`,
+  ROOM_FORFEIT: (roomCode: string) => `/users/rooms/${roomCode}/forfeit`,
   GAME_QUIZ_QUESTIONS: (gameId: number | string) => `/users/games/${gameId}/quiz-questions`,
   GAME_MEMORY_CARDS: (gameId: number | string) => `/users/games/${gameId}/memory-cards`,
   GAME_LOGIC_PUZZLES: (gameId: number | string) => `/users/games/${gameId}/logic-puzzles`,
@@ -57,6 +60,10 @@ export const ADMIN_ENDPOINTS = {
   GAME_BY_ID: (id: number | string) => `/admin/games/${id}`,
   GAME_AI_REVIEW: (id: number | string) => `/admin/games/${id}/ai-review`,
   GAME_STATUS: (id: number | string) => `/admin/games/${id}/status`,
+  GAME_DEACTIVATE: (id: number | string) => `/admin/games/${id}/deactivate`,
+  GAME_ACTIVATE: (id: number | string) => `/admin/games/${id}/activate`,
+  GAME_REACTIVATION_ACCEPT: (id: number | string) => `/admin/games/${id}/reactivation/accept`,
+  GAME_REACTIVATION_REJECT: (id: number | string) => `/admin/games/${id}/reactivation/reject`,
   GAME_QUESTIONS: (id: number | string) => `/admin/games/${id}/questions`,
 
   GAME_MEMORY_CARDS: (id: number | string) => `/admin/games/${id}/memory-cards`,
@@ -77,6 +84,8 @@ export const EDUCATOR_ENDPOINTS = {
   GAME_COVER_UPLOAD: (id: number | string) => `/educator/games/${id}/cover/upload`,
   GAME_COVER_GENERATE_PREVIEW: "/educator/games/cover/generate-preview",
   GAME_SUBMIT: (id: number | string) => `/educator/games/${id}/submit`,
+  GAME_REQUEST_REACTIVATION: (id: number | string) => `/educator/games/${id}/request-reactivation`,
+  GAME_CANCEL_REACTIVATION_REQUEST: (id: number | string) => `/educator/games/${id}/cancel-reactivation-request`,
   QUESTIONS: "/educator/questions",
   QUESTION_BY_ID: (id: number | string) => `/educator/questions/${id}`,
   QUESTION_MEDIA_UPLOAD: (id: number | string) => `/educator/questions/${id}/media/upload`,
@@ -91,7 +100,9 @@ export const EDUCATOR_ENDPOINTS = {
   VOICE_SERIES: "/educator/voice/series",
   VOICE_SERIES_BY_ID: (id: number | string) => `/educator/voice/series/${id}`,
   VOICE_SERIES_PUBLISH: (id: number | string) => `/educator/voice/series/${id}/publish`,
+  RECLAMATIONS: "/educator/reclamations",
   VOICE_SERIES_ARCHIVE: (id: number | string) => `/educator/voice/series/${id}/archive`,
+  VOICE_SERIES_UNARCHIVE: (id: number | string) => `/educator/voice/series/${id}/unarchive`,
   VOICE_PROMPTS: "/educator/voice/prompts",
   VOICE_PROMPT_BY_ID: (id: number | string) => `/educator/voice/prompts/${id}`,
 } as const;
@@ -107,6 +118,7 @@ export const PLAYER_VOICE_ENDPOINTS = {
 
 export const SPONSOR_ENDPOINTS = {
   DASHBOARD_STATS: "/sponsor/dashboard/stats",
+  JEUX: "/sponsor/jeux",
   PUBLICITES: "/sponsor/publicites",
   PUBLICITE_BY_ID: (id: number | string) => `/sponsor/publicites/${id}`,
   PUBLICITE_STATUS: (id: number | string) => `/sponsor/publicites/${id}/status`,
@@ -115,4 +127,9 @@ export const SPONSOR_ENDPOINTS = {
   RECOMPENSE_STATUS: (id: number | string) => `/sponsor/recompenses/${id}/status`,
   REWARD_REQUESTS: "/sponsor/reward-requests",
   REWARD_REQUEST_STATUS: (id: number | string) => `/sponsor/reward-requests/${id}/status`,
+} as const;
+
+export const PLAYER_AD_ENDPOINTS = {
+  ACTIVE: "/player/ads/active",
+  INTERACTION: (id: number | string) => `/player/ads/${id}/interactions`,
 } as const;

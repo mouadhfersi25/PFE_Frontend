@@ -9,7 +9,7 @@ import { QuizVariantBadge } from '@/components/educator/QuizVariantPicker';
 import { getQuizVariantMeta } from '@/constants/quizVariants';
 
 function difficultyLabel(d: number | null): string {
-  return d === 1 ? 'Easy' : d === 2 ? 'Medium' : d === 3 ? 'Hard' : 'Medium';
+  return d === 1 ? 'Facile' : d === 2 ? 'Moyen' : d === 3 ? 'Difficile' : 'Moyen';
 }
 
 export default function ViewQuestion() {
@@ -24,7 +24,7 @@ export default function ViewQuestion() {
 
   useEffect(() => {
     if (!Number.isFinite(questionId)) {
-      setError('Invalid question id');
+      setError('Identifiant de question invalide');
       setLoading(false);
       return;
     }
@@ -48,7 +48,7 @@ export default function ViewQuestion() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err?.response?.data?.message ?? err?.message ?? 'Failed to load question.');
+        setError(err?.response?.data?.message ?? err?.message ?? 'Impossible de charger la question.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -75,7 +75,7 @@ export default function ViewQuestion() {
         <EducatorSidebar />
         <EducatorHeader />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-10 h-10 text-green-500 animate-spin" />
+          <Loader2 className="w-10 h-10 text-sky-500 animate-spin" />
         </div>
       </div>
     );
@@ -89,7 +89,7 @@ export default function ViewQuestion() {
         <div className="flex-1 flex items-center justify-center gap-4">
           <p className="text-gray-600">{error ?? 'Question introuvable.'}</p>
           <button onClick={() => navigate('/educator/games/manage')} className="text-green-600 hover:underline font-medium">
-            Back to Games
+            Retour aux jeux
           </button>
         </div>
       </div>
@@ -113,7 +113,7 @@ export default function ViewQuestion() {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 mb-5 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Games
+            Retour aux jeux
           </button>
 
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm mb-6">
@@ -127,7 +127,7 @@ export default function ViewQuestion() {
             <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
               <span
                 className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                  diff === 'Easy' ? 'bg-green-100 text-green-800' : diff === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                  diff === 'Facile' ? 'bg-green-100 text-green-800' : diff === 'Moyen' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                 }`}
               >
                 {diff}

@@ -1,20 +1,18 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle, XCircle, Lightbulb, Zap, ThumbsUp, ThumbsDown, PenLine, Sparkles, Image as ImageIcon, Languages, Palette, Volume2, Play, Pause } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, XCircle, Lightbulb, ThumbsUp, ThumbsDown, PenLine, Sparkles, Image as ImageIcon, Languages, Palette, Volume2, Play, Pause } from 'lucide-react';
 import userApi from '@/api/user/user.api';
+import { forfeitRoom } from '@/services/roomService';
+import { useRoomBeaconOnUnload } from '@/hooks/useRoomBeaconOnUnload';
 import PlayerHeaderActions from '@/components/player/PlayerHeaderActions';
+import FullscreenToggleButton from '@/components/player/FullscreenToggleButton';
 import { exitFullscreenSafely } from '@/utils/fullscreen';
 import type { QuizQuestionDTO, GameDTO } from '@/api/types';
 import { normalizeQuizVariant } from '@/constants/quizVariants';
-import {
-  PlayerQuizVariantBanner,
-  PlayerQuizVariantChip,
-  PlayerQuizVariantHint,
-} from '@/components/player/PlayerQuizVariant';
-
-const BLITZ_DURATION_SECONDS = 60;
-const BLITZ_FEEDBACK_MS = 650;
+import { PlayerQuizVariantChip } from '@/components/player/PlayerQuizVariant';
+import InGameAdOverlay from '@/components/player/InGameAdOverlay';
+import { useInGameAd } from '@/hooks/useInGameAd';
 
 function shuffleArray<T>(items: T[]): T[] {
   const copy = [...items];
@@ -255,7 +253,7 @@ function QuizAudioPlayer({
         className={`flex h-24 w-24 items-center justify-center rounded-full border-2 border-cyan-400/40 bg-cyan-500/15 text-cyan-100 shadow-lg ${
           playing ? 'ring-4 ring-cyan-400/30' : ''
         }`}
-        aria-label={playing ? 'Pause' : 'Écouter'}
+        aria-label={playing ? 'Mettre en pause' : 'Écouter'}
       >
         {playing ? <Pause className="h-10 w-10" /> : <Play className="h-10 w-10 ml-1" />}
       </motion.button>
@@ -279,19 +277,17 @@ export default function QuizGame() {
   const location = useLocation();
   const { gameId } = useParams();
   const { game, mode, roomCode } = location.state || {};
+  useRoomBeaconOnUnload(mode === 'Online', roomCode, 'forfeit');
   const [quizRows, setQuizRows] = useState<QuizQuestionDTO[]>([]);
   const [fetchedGame, setFetchedGame] = useState<GameDTO | null>(null);
 
   const resolvedGame = useMemo(() => {
-    const g = game as { title?: string; quizVariant?: string; quizPlayMode?: string } | undefined;
+    const g = game as { title?: string; quizVariant?: string } | undefined;
     return {
       title: g?.title ?? fetchedGame?.titre ?? 'Quiz',
       quizVariant: g?.quizVariant ?? fetchedGame?.quizVariant ?? 'DEFAULT',
-      quizPlayMode: g?.quizPlayMode ?? fetchedGame?.quizPlayMode ?? 'CLASSIC',
     };
   }, [game, fetchedGame]);
-
-  const isBlitzMode = resolvedGame.quizPlayMode === 'BLITZ_60S';
 
   const activeVariant = useMemo(() => {
     const fromGame = normalizeQuizVariant(resolvedGame.quizVariant);
@@ -336,21 +332,16 @@ export default function QuizGame() {
         points: 10,
       };
     });
-    return isBlitzMode ? shuffleArray(byGame) : byGame;
-  }, [quizRows, isBlitzMode, activeVariant]);
+    return byGame;
+  }, [quizRows, activeVariant]);
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [blitzFeedback, setBlitzFeedback] = useState<'correct' | 'incorrect' | null>(null);
   const [score, setScore] = useState(0);
   const [correctAnswersCount, setCorrectAnswersCount] = useState(0);
-  const [questionsAnsweredCount, setQuestionsAnsweredCount] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(BLITZ_DURATION_SECONDS);
-  const [answeredQuestions, setAnsweredQuestions] = useState<boolean[]>(() => new Array(questions.length).fill(false));
   const sessionStartMsRef = useRef<number>(Date.now());
   const isFinishingRef = useRef(false);
-  const blitzAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const configuredDurationMinutes = useMemo(() => {
     const fromGameField = Number(game?.durationMinutes);
@@ -364,16 +355,18 @@ export default function QuizGame() {
     return 10;
   }, [game]);
 
-  const configuredDurationSeconds = isBlitzMode
-    ? BLITZ_DURATION_SECONDS
-    : configuredDurationMinutes * 60;
+  const configuredDurationSeconds = configuredDurationMinutes * 60;
+  const [timeLeft, setTimeLeft] = useState(configuredDurationSeconds);
 
   const totalQuestions = questions.length;
-  const questionIndex = isBlitzMode
-    ? (totalQuestions > 0 ? currentQuestion % totalQuestions : 0)
-    : currentQuestion;
-  const question = questions[questionIndex];
-  const isLastQuestion = !isBlitzMode && currentQuestion === totalQuestions - 1;
+  const question = questions[currentQuestion];
+  const isLastQuestion = currentQuestion === totalQuestions - 1;
+  const [gameOver, setGameOver] = useState(false);
+  const pendingResultRef = useRef<{ sessionData: Record<string, unknown> } | null>(null);
+  const { ad, visible: adVisible, ready: adReady, dismiss: dismissAd, openCta } = useInGameAd(
+    gameId,
+    gameOver
+  );
 
   useEffect(() => {
     if (!gameId) return;
@@ -413,70 +406,65 @@ export default function QuizGame() {
   }, [gameId]);
 
   useEffect(() => {
-    setAnsweredQuestions(new Array(questions.length).fill(false));
     setCurrentQuestion(0);
     setSelectedAnswer(null);
     setShowExplanation(false);
-    setBlitzFeedback(null);
     setScore(0);
     setCorrectAnswersCount(0);
-    setQuestionsAnsweredCount(0);
     setTimeLeft(configuredDurationSeconds);
     sessionStartMsRef.current = Date.now();
     isFinishingRef.current = false;
+    pendingResultRef.current = null;
+    setGameOver(false);
   }, [gameId, questions.length, configuredDurationSeconds]);
 
-  useEffect(() => {
-    return () => {
-      if (blitzAdvanceTimerRef.current) clearTimeout(blitzAdvanceTimerRef.current);
-    };
-  }, []);
-
+  /**
+   * Marque la partie comme terminée : la pub sponsor (si dispo) s'affiche à ce moment précis,
+   * juste avant le résultat. La navigation réelle vers l'écran de résultat n'a lieu qu'une fois
+   * la pub vue/fermée (cf. l'effet ci-dessous qui observe `adReady`).
+   */
   const handleFinishGame = useCallback(async () => {
     if (isFinishingRef.current) return;
     isFinishingRef.current = true;
-    const answeredTotal = isBlitzMode ? questionsAnsweredCount : totalQuestions;
     const correctTotal = correctAnswersCount;
-    const accuracy = answeredTotal > 0 ? (correctTotal / answeredTotal) * 100 : 0;
+    const accuracy = totalQuestions > 0 ? (correctTotal / totalQuestions) * 100 : 0;
     const durationSeconds = Math.max(1, Math.round((Date.now() - sessionStartMsRef.current) / 1000));
-    await exitFullscreenSafely();
-    navigate('/player/game-result', {
-      state: {
-        game,
-        mode,
-        roomCode,
-        sessionData: {
-          scoreFinal: score,
-          accuracy: Math.round(accuracy),
-          durationSeconds,
-          reussite: isBlitzMode ? correctTotal >= 5 : score >= 80,
-          totalQuestions: answeredTotal,
-          correctAnswers: correctTotal,
-        },
+    pendingResultRef.current = {
+      sessionData: {
+        scoreFinal: score,
+        accuracy: Math.round(accuracy),
+        durationSeconds,
+        reussite: score >= 80,
+        totalQuestions,
+        correctAnswers: correctTotal,
       },
-    });
-  }, [
-    correctAnswersCount,
-    game,
-    isBlitzMode,
-    mode,
-    navigate,
-    questionsAnsweredCount,
-    roomCode,
-    score,
-    totalQuestions,
-  ]);
+    };
+    setGameOver(true);
+  }, [correctAnswersCount, score, totalQuestions]);
 
   useEffect(() => {
+    if (!gameOver || !adReady || !pendingResultRef.current) return;
+    const pending = pendingResultRef.current;
+    pendingResultRef.current = null;
+    void (async () => {
+      await exitFullscreenSafely();
+      navigate('/player/game-result', {
+        state: { game, mode, roomCode, sessionData: pending.sessionData },
+      });
+    })();
+  }, [gameOver, adReady, game, mode, roomCode, navigate]);
+
+  useEffect(() => {
+    if (gameOver) return;
     if (timeLeft <= 0) {
       void handleFinishGame();
       return;
     }
-    const timerPaused = !isBlitzMode && showExplanation;
+    const timerPaused = adVisible || showExplanation;
     if (timerPaused) return;
     const timer = setTimeout(() => setTimeLeft((prev) => prev - 1), 1000);
     return () => clearTimeout(timer);
-  }, [timeLeft, showExplanation, isBlitzMode, handleFinishGame]);
+  }, [timeLeft, showExplanation, handleFinishGame, adVisible, gameOver]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -484,37 +472,8 @@ export default function QuizGame() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const processAnswer = useCallback((answerIndex: number) => {
-    if (!question) return;
-
-    const isCorrectAnswer = answerIndex === question.correctAnswer;
-
-    if (isBlitzMode) {
-      if (blitzFeedback !== null) return;
-      setSelectedAnswer(answerIndex);
-      setBlitzFeedback(isCorrectAnswer ? 'correct' : 'incorrect');
-      setQuestionsAnsweredCount((prev) => prev + 1);
-      if (isCorrectAnswer) {
-        setScore((prev) => prev + question.points);
-        setCorrectAnswersCount((prev) => prev + 1);
-      }
-      blitzAdvanceTimerRef.current = setTimeout(() => {
-        setBlitzFeedback(null);
-        setSelectedAnswer(null);
-        setCurrentQuestion((prev) => prev + 1);
-      }, BLITZ_FEEDBACK_MS);
-      return;
-    }
-
-    setSelectedAnswer(answerIndex);
-  }, [blitzFeedback, isBlitzMode, question]);
-
   const handleAnswerSelect = (answerIndex: number) => {
-    if (showExplanation || blitzFeedback !== null) return;
-    if (isBlitzMode) {
-      processAnswer(answerIndex);
-      return;
-    }
+    if (showExplanation) return;
     setSelectedAnswer(answerIndex);
   };
 
@@ -522,10 +481,6 @@ export default function QuizGame() {
     if (selectedAnswer === null || !question) return;
 
     setShowExplanation(true);
-
-    const newAnsweredQuestions = [...answeredQuestions];
-    newAnsweredQuestions[currentQuestion] = true;
-    setAnsweredQuestions(newAnsweredQuestions);
 
     if (selectedAnswer === question.correctAnswer) {
       setScore((prev) => prev + question.points);
@@ -537,18 +492,14 @@ export default function QuizGame() {
     if (isLastQuestion) {
       void handleFinishGame();
     } else {
-      setCurrentQuestion(currentQuestion + 1);
+      setCurrentQuestion((prev) => prev + 1);
       setSelectedAnswer(null);
       setShowExplanation(false);
     }
   };
 
   const timePercentage = configuredDurationSeconds > 0 ? (timeLeft / configuredDurationSeconds) * 100 : 0;
-  const progressPercentage = isBlitzMode
-    ? Math.min(100, (questionsAnsweredCount / Math.max(questionsAnsweredCount + 1, 5)) * 100)
-    : totalQuestions > 0
-      ? ((currentQuestion + 1) / totalQuestions) * 100
-      : 0;
+  const progressPercentage = totalQuestions > 0 ? ((currentQuestion + 1) / totalQuestions) * 100 : 0;
 
   const isCorrect = question ? selectedAnswer === question.correctAnswer : false;
   const isTrueFalseQuestion = activeVariant === 'TRUE_FALSE';
@@ -559,10 +510,10 @@ export default function QuizGame() {
   const isAudioColorQuestion = activeVariant === 'AUDIO_COLOR';
   const isSpecialSubtypeQuestion = activeVariant !== 'DEFAULT';
 
-  const answerLocked = showExplanation || blitzFeedback !== null;
+  const answerLocked = showExplanation;
 
   const getClozeBlankState = (): 'empty' | 'filled' | 'correct' | 'incorrect' => {
-    if (showExplanation || blitzFeedback !== null) {
+    if (showExplanation) {
       return isCorrect ? 'correct' : 'incorrect';
     }
     return selectedAnswer !== null ? 'filled' : 'empty';
@@ -575,7 +526,7 @@ export default function QuizGame() {
 
   const renderTrueFalseSection = () => {
     if (!question) return null;
-    const locked = showExplanation || blitzFeedback !== null;
+    const locked = showExplanation;
 
     return (
       <div className="mb-6 space-y-6">
@@ -653,7 +604,7 @@ export default function QuizGame() {
                   )}
                   {showIncorrect && (
                     <span className="flex items-center gap-1 text-sm font-semibold text-red-200">
-                      <XCircle className="h-4 w-4" /> Incorrect
+                      <XCircle className="h-4 w-4" /> Mauvaise réponse
                     </span>
                   )}
                 </div>
@@ -667,7 +618,7 @@ export default function QuizGame() {
 
   const renderClozeSection = () => {
     if (!question) return null;
-    const locked = showExplanation || blitzFeedback !== null;
+    const locked = showExplanation;
     const blankState = getClozeBlankState();
     const blankWord = getClozeBlankWord();
     const parts = question.question.split('___');
@@ -1043,57 +994,55 @@ export default function QuizGame() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="bg-slate-950/75 backdrop-blur-xl border-b border-white/10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-4">
+    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
+      {ad && adVisible ? (
+        <InGameAdOverlay ad={ad} onContinue={dismissAd} onCtaClick={openCta} />
+      ) : null}
+      <header className="shrink-0 bg-slate-950/75 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => {
                   if (window.confirm('Quitter la partie ? Votre progression sera perdue.')) {
+                    if (mode === 'Online' && roomCode) void forfeitRoom(roomCode);
                     navigate('/player/dashboard');
                   }
                 }}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"
               >
-                <ArrowLeft className="w-6 h-6 text-white" />
+                <ArrowLeft className="w-5 h-5 text-white" />
               </motion.button>
               <div>
-                <h1 className="text-xl font-bold text-white">{resolvedGame.title}</h1>
-                <p className="text-sm text-slate-300 flex flex-wrap items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold text-white leading-tight">{resolvedGame.title}</h1>
+                <p className="text-xs sm:text-sm text-slate-300 flex flex-wrap items-center gap-2">
                   <PlayerQuizVariantChip variant={activeVariant} />
-                  {isBlitzMode && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 border border-orange-400/30 px-2 py-0.5 text-xs font-semibold text-orange-200">
-                      <Zap className="h-3 w-3" /> Blitz 60 s
-                    </span>
-                  )}
                   <span className="text-slate-400">
-                    {isBlitzMode
-                      ? `${questionsAnsweredCount} réponse${questionsAnsweredCount > 1 ? 's' : ''} · ${correctAnswersCount} bonne${correctAnswersCount > 1 ? 's' : ''}`
-                      : `Question ${currentQuestion + 1} sur ${totalQuestions}`}
+                    {`Question ${currentQuestion + 1} sur ${totalQuestions}`}
                   </span>
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-4">
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${isBlitzMode ? 'bg-orange-50' : 'bg-blue-50'}`}>
-                  {isBlitzMode ? <Zap className="w-5 h-5 text-orange-600" /> : <Clock className="w-5 h-5 text-blue-600" />}
-                  <span className={`font-bold ${isBlitzMode ? 'text-orange-600' : 'text-blue-600'}`}>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  <span className="font-bold text-sm text-blue-600">
                     {formatTime(timeLeft)}
                   </span>
                 </div>
-                <div className="px-4 py-2 bg-purple-50 rounded-lg">
-                  <span className="font-bold text-purple-600">Score : {score}</span>
+                <div className="px-2.5 py-1 bg-purple-50 rounded-lg">
+                  <span className="font-bold text-sm text-purple-600">Score : {score}</span>
                 </div>
               </div>
+              <FullscreenToggleButton />
               <PlayerHeaderActions />
             </div>
           </div>
 
-          <div className="relative h-2 bg-white/20 rounded-full overflow-hidden">
+          <div className="relative h-1.5 bg-white/20 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progressPercentage}%` }}
@@ -1101,7 +1050,7 @@ export default function QuizGame() {
             />
           </div>
 
-          <div className="relative h-1 bg-white/20 rounded-full overflow-hidden mt-2">
+          <div className="relative h-1 bg-white/20 rounded-full overflow-hidden mt-1.5">
             <motion.div
               animate={{ width: `${timePercentage}%` }}
               className={`absolute inset-y-0 left-0 rounded-full ${
@@ -1112,16 +1061,16 @@ export default function QuizGame() {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <PlayerQuizVariantBanner variant={activeVariant} />
-
+      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-full flex items-center justify-center px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+      <div className="max-w-4xl w-full">
         <AnimatePresence mode="wait">
           <motion.div
-            key={`${questionIndex}-${questionsAnsweredCount}`}
+            key={currentQuestion}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className={`rounded-2xl p-6 sm:p-8 border backdrop-blur-xl ${
+            className={`rounded-2xl p-4 sm:p-5 border backdrop-blur-xl ${
               isTrueFalseQuestion
                 ? 'bg-sky-950/20 border-sky-400/20'
                 : isClozeQuestion
@@ -1137,47 +1086,32 @@ export default function QuizGame() {
                           : 'bg-white/5 border-white/15'
             }`}
           >
-            <div className={`${isSpecialSubtypeQuestion ? 'mb-5' : 'mb-8'}`}>
-              <div className="flex items-center gap-2 text-sm text-slate-300 flex-wrap mb-4">
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 text-sm font-bold text-white">
-                  {isBlitzMode ? '⚡' : currentQuestion + 1}
+            <div className={`${isSpecialSubtypeQuestion ? 'mb-3' : 'mb-3'}`}>
+              <div className="flex items-center gap-2 text-sm text-slate-300 flex-wrap mb-2">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 text-sm font-bold text-white">
+                  {currentQuestion + 1}
                 </span>
                 <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full font-semibold">
                   {question.points} points
                 </span>
               </div>
 
-              <PlayerQuizVariantHint variant={activeVariant} />
-
               {!isSpecialSubtypeQuestion && (
-                <h2 className="text-2xl font-bold text-white mb-4">{question.question}</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-white mb-2">{question.question}</h2>
               )}
 
               {!isSpecialSubtypeQuestion && question.mediaUrl && (
-                <div className="mt-4">
+                <div className="mt-2">
                   <QuizMediaImage
                     src={question.mediaUrl}
                     alt="question-media"
-                    className="max-h-60 rounded-xl border border-white/20 bg-white/5 object-contain"
-                    fallbackClassName="flex h-40 items-center justify-center rounded-xl border border-dashed border-white/20 bg-white/5 text-slate-400 text-sm"
+                    className="max-h-28 sm:max-h-36 rounded-xl border border-white/20 bg-white/5 object-contain"
+                    fallbackClassName="flex h-20 items-center justify-center rounded-xl border border-dashed border-white/20 bg-white/5 text-slate-400 text-sm"
                   />
                 </div>
               )}
             </div>
 
-            {isBlitzMode && blitzFeedback && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={`mb-4 px-4 py-3 rounded-xl text-center font-bold ${
-                  blitzFeedback === 'correct'
-                    ? 'bg-green-500/20 text-green-200 border border-green-400/40'
-                    : 'bg-red-500/20 text-red-200 border border-red-400/40'
-                }`}
-              >
-                {blitzFeedback === 'correct' ? '✓ Bonne réponse !' : '✗ Raté'}
-              </motion.div>
-            )}
 
             {isTrueFalseQuestion ? (
               renderTrueFalseSection()
@@ -1192,21 +1126,21 @@ export default function QuizGame() {
             ) : isAudioColorQuestion ? (
               renderAudioColorSection()
             ) : (
-              <div className="space-y-3 mb-6">
+              <div className="space-y-2 mb-3">
                 {question.options.map((option, index) => {
                   const isSelected = selectedAnswer === index;
                   const isCorrectAnswer = index === question.correctAnswer;
-                  const showCorrect = (showExplanation || blitzFeedback !== null) && isCorrectAnswer;
-                  const showIncorrect = (showExplanation || blitzFeedback === 'incorrect') && isSelected && !isCorrectAnswer;
+                  const showCorrect = showExplanation && isCorrectAnswer;
+                  const showIncorrect = showExplanation && isSelected && !isCorrectAnswer;
 
                   return (
                     <motion.button
                       key={index}
-                      whileHover={!showExplanation && blitzFeedback === null ? { scale: 1.02, x: 5 } : {}}
-                      whileTap={!showExplanation && blitzFeedback === null ? { scale: 0.98 } : {}}
+                      whileHover={!showExplanation ? { scale: 1.02, x: 5 } : {}}
+                      whileTap={!showExplanation ? { scale: 0.98 } : {}}
                       onClick={() => handleAnswerSelect(index)}
-                      disabled={showExplanation || blitzFeedback !== null}
-                      className={`w-full p-4 rounded-xl border-2 text-left font-medium transition-all ${
+                      disabled={showExplanation}
+                      className={`w-full p-2.5 rounded-xl border-2 text-left font-medium text-sm sm:text-base transition-all ${
                         showCorrect
                           ? 'bg-green-50 border-green-500 text-green-900'
                           : showIncorrect
@@ -1214,12 +1148,12 @@ export default function QuizGame() {
                           : isSelected
                           ? 'bg-purple-50 border-purple-500 text-purple-900'
                           : 'bg-white/5 border-white/20 text-slate-100 hover:border-fuchsia-300 hover:bg-white/10'
-                      } ${showExplanation || blitzFeedback !== null ? 'cursor-default' : 'cursor-pointer'}`}
+                      } ${showExplanation ? 'cursor-default' : 'cursor-pointer'}`}
                     >
                       <div className="flex items-center justify-between">
                         <span>{option}</span>
-                        {showCorrect && <CheckCircle className="w-6 h-6 text-green-600" />}
-                        {showIncorrect && <XCircle className="w-6 h-6 text-red-600" />}
+                        {showCorrect && <CheckCircle className="w-5 h-5 text-green-600 shrink-0 ml-2" />}
+                        {showIncorrect && <XCircle className="w-5 h-5 text-red-600 shrink-0 ml-2" />}
                       </div>
                     </motion.button>
                   );
@@ -1228,33 +1162,33 @@ export default function QuizGame() {
             )}
 
             <AnimatePresence>
-              {showExplanation && !isBlitzMode && (
+              {showExplanation && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className={`p-6 rounded-xl mb-6 ${
+                  className={`p-3 rounded-xl mb-3 ${
                     isCorrect ? 'bg-green-50 border-2 border-green-300' : 'bg-red-50 border-2 border-red-300'
                   }`}
                 >
-                  <div className="flex items-start gap-3">
+                  <div className="flex items-start gap-2">
                     {isCorrect ? (
-                      <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
                     ) : (
-                      <XCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+                      <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                     )}
                     <div>
-                      <h3 className={`font-bold mb-2 ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
-                        {isCorrect ? '🎉 Correct !' : '❌ Incorrect'}
+                      <h3 className={`font-bold mb-1 text-sm sm:text-base ${isCorrect ? 'text-green-900' : 'text-red-900'}`}>
+                        {isCorrect ? '🎉 Bonne réponse !' : '❌ Mauvaise réponse'}
                       </h3>
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-start gap-1.5">
                         <Lightbulb
-                          className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                          className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
                             isCorrect ? 'text-amber-600' : 'text-amber-700'
                           }`}
                         />
                         <p
-                          className={`text-sm sm:text-base leading-relaxed ${
+                          className={`text-xs sm:text-sm leading-snug ${
                             isCorrect ? 'text-green-900' : 'text-red-900'
                           }`}
                         >
@@ -1266,44 +1200,46 @@ export default function QuizGame() {
                         </p>
                       </div>
                       {isCorrect && (
-                        <p className="mt-2 font-semibold text-green-700">+{question.points} points</p>
+                        <p className="mt-1 font-semibold text-green-700 text-sm">+{question.points} points</p>
                       )}
                     </div>
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {!isBlitzMode && (
-              <div className="flex gap-4">
-                {!showExplanation ? (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleVerifyAnswer}
-                    disabled={selectedAnswer === null}
-                    className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all ${
-                      selectedAnswer === null
-                        ? 'bg-white/15 text-slate-400 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:shadow-lg'
-                    }`}
-                  >
-                    Vérifier
-                  </motion.button>
-                ) : (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleNextQuestion}
-                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-4 rounded-xl font-bold text-lg hover:shadow-lg transition-shadow"
-                  >
-                    {isLastQuestion ? 'Terminer le quiz' : 'Question suivante'}
-                  </motion.button>
-                )}
-              </div>
-            )}
           </motion.div>
         </AnimatePresence>
+      </div>
+      </div>
+      </div>
+
+      <div className="shrink-0 bg-slate-950/90 backdrop-blur-xl border-t border-white/10 px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="max-w-4xl mx-auto flex gap-4">
+          {!showExplanation ? (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleVerifyAnswer}
+              disabled={selectedAnswer === null}
+              className={`flex-1 py-3 rounded-xl font-bold text-base sm:text-lg transition-all ${
+                selectedAnswer === null
+                  ? 'bg-white/15 text-slate-400 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:shadow-lg'
+              }`}
+            >
+              Vérifier
+            </motion.button>
+          ) : (
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handleNextQuestion}
+              className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 rounded-xl font-bold text-base sm:text-lg hover:shadow-lg transition-shadow"
+            >
+              {isLastQuestion ? 'Terminer le quiz' : 'Question suivante'}
+            </motion.button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
 import educatorApi from '@/api/educator/educator.api';
 import type { GameDTO, LogicPuzzleDTO } from '@/api/types';
+import { canEditGameContent } from '@/utils/gameEditPolicy';
 import {
   LOGIC_SUBTYPE_CATALOG,
   getLogicSubtypeMeta,
@@ -70,7 +71,7 @@ export default function ConfigureLogicGame() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canEdit = game?.etat === 'BROUILLON' || game?.etat === 'REFUSE';
+  const canEdit = canEditGameContent(game);
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -270,11 +271,11 @@ export default function ConfigureLogicGame() {
         <div className="p-6 md:p-8 max-w-5xl mx-auto">
           <button
             type="button"
-            onClick={() => navigate('/educator/games/manage')}
+            onClick={() => navigate(`/educator/games/manage/${id}/edit`)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 mb-5 shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            Retour aux jeux
+            Retour aux infos du jeu
           </button>
 
           <div className="rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 p-6 mb-6 shadow-lg text-white">
@@ -377,8 +378,9 @@ export default function ConfigureLogicGame() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                     <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Énoncé</label>
+                      <label htmlFor={`puzzle-${idx}-enonce`} className="block text-sm font-semibold text-gray-700 mb-1">Énoncé</label>
                       <textarea
+                        id={`puzzle-${idx}-enonce`}
                         rows={2}
                         disabled={!canEdit}
                         value={row.enonce}
@@ -388,8 +390,9 @@ export default function ConfigureLogicGame() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Difficulté (0–10)</label>
+                      <label htmlFor={`puzzle-${idx}-difficulte`} className="block text-sm font-semibold text-gray-700 mb-1">Difficulté (0–10)</label>
                       <input
+                        id={`puzzle-${idx}-difficulte`}
                         type="number"
                         min={0}
                         max={10}
@@ -403,8 +406,9 @@ export default function ConfigureLogicGame() {
 
                   {row.subtype === 'SUITE_LOGIQUE' && (
                     <div className="mb-4">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Suite (éléments séparés par des virgules)</label>
+                      <label htmlFor={`puzzle-${idx}-sequence`} className="block text-sm font-semibold text-gray-700 mb-1">Suite (éléments séparés par des virgules)</label>
                       <input
+                        id={`puzzle-${idx}-sequence`}
                         type="text"
                         disabled={!canEdit}
                         value={row.sequence}
@@ -417,8 +421,9 @@ export default function ConfigureLogicGame() {
 
                   {(row.subtype === 'INTRUS' || row.subtype === 'DEDUCTION') && (
                     <div className="mb-4">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Options (une par ligne)</label>
+                      <label htmlFor={`puzzle-${idx}-options`} className="block text-sm font-semibold text-gray-700 mb-1">Options (une par ligne)</label>
                       <textarea
+                        id={`puzzle-${idx}-options`}
                         rows={4}
                         disabled={!canEdit}
                         value={row.options}
@@ -442,8 +447,9 @@ export default function ConfigureLogicGame() {
                   {row.subtype !== 'COLOR_MATCH' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Bonne réponse</label>
+                        <label htmlFor={`puzzle-${idx}-bonneReponse`} className="block text-sm font-semibold text-gray-700 mb-1">Bonne réponse</label>
                         <input
+                          id={`puzzle-${idx}-bonneReponse`}
                           type="text"
                           disabled={!canEdit}
                           value={row.bonneReponse}
@@ -453,8 +459,9 @@ export default function ConfigureLogicGame() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">Indice (optionnel)</label>
+                        <label htmlFor={`puzzle-${idx}-indice`} className="block text-sm font-semibold text-gray-700 mb-1">Indice (optionnel)</label>
                         <input
+                          id={`puzzle-${idx}-indice`}
                           type="text"
                           disabled={!canEdit}
                           value={row.indice}
@@ -468,8 +475,9 @@ export default function ConfigureLogicGame() {
 
                   {row.subtype === 'COLOR_MATCH' && (
                     <div className="mb-4">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Indice (optionnel)</label>
+                      <label htmlFor={`puzzle-${idx}-indice`} className="block text-sm font-semibold text-gray-700 mb-1">Indice (optionnel)</label>
                       <input
+                        id={`puzzle-${idx}-indice`}
                         type="text"
                         disabled={!canEdit}
                         value={row.indice}
@@ -485,7 +493,7 @@ export default function ConfigureLogicGame() {
                       type="button"
                       onClick={() => saveRow(idx)}
                       disabled={!canEdit || saving}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-60 font-semibold text-sm"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-600 text-white rounded-xl hover:bg-sky-700 disabled:opacity-60 font-semibold text-sm"
                     >
                       <Save className="w-4 h-4" />
                       {saving ? 'Enregistrement…' : 'Enregistrer le puzzle'}

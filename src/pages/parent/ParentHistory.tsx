@@ -1,43 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Clock, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import userApi from '@/api/user/user.api';
-import type { LinkedChildProfileDTO, PlayerHistorySessionDTO } from '@/api/types';
+import { useParentChildren } from '@/context';
+import ChildSwitcher from '@/components/parent/ChildSwitcher';
+import type { PlayerHistorySessionDTO } from '@/api/types';
 
 export default function ParentHistory() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [children, setChildren] = useState<LinkedChildProfileDTO[]>([]);
+  const { selectedChild } = useParentChildren();
   const [sessions, setSessions] = useState<PlayerHistorySessionDTO[]>([]);
   const [loading, setLoading] = useState(true);
-  const childIdFromState = (location.state as { childId?: number } | null)?.childId ?? null;
-
-  useEffect(() => {
-    let cancelled = false;
-    userApi
-      .getLinkedChildren()
-      .then((res) => {
-        if (cancelled) return;
-        setChildren(Array.isArray(res.data) ? res.data : []);
-      })
-      .catch(() => {
-        if (!cancelled) setChildren([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const selectedChild = useMemo(() => {
-    if (children.length === 0) return null;
-    if (childIdFromState != null) {
-      const match = children.find((c) => c.id === childIdFromState);
-      if (match) return match;
-    }
-    return children[0];
-  }, [children, childIdFromState]);
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -90,6 +65,7 @@ export default function ParentHistory() {
       </header>
 
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <ChildSwitcher className="mb-6" />
         {loading ? (
           <div className="flex justify-center py-20 text-slate-500">
             <Loader2 className="h-10 w-10 animate-spin text-teal-600" />

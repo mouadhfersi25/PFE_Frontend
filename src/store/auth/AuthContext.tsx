@@ -1,6 +1,7 @@
 // Auth Context
 import React, { createContext, useState, useEffect, ReactNode } from "react";
 import { authService } from "../../services/auth.service";
+import storage from "../../utils/storage";
 
 interface AuthUser {
   email: string;
@@ -15,17 +16,21 @@ interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function readStoredUser(): AuthUser | null {
+  const token = storage.get("jwt_token");
+  if (!token) return null;
+  const email = storage.get("auth_email");
+  const role = storage.get("auth_role") || undefined;
+  if (!email) return { email: "logged_user", role };
+  return { email, role };
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token] = useState(localStorage.getItem("jwt_token"));
+  const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
 
   useEffect(() => {
-    if (token) {
-      const email = localStorage.getItem("auth_email");
-      const role = localStorage.getItem("auth_role");
-      setUser(email ? { email, role: role || undefined } : { email: "logged_user" });
-    }
-  }, [token]);
+    setUser(readStoredUser());
+  }, []);
 
   const login = async (credentials: Record<string, unknown>) => {
     const data = await authService.login(credentials);

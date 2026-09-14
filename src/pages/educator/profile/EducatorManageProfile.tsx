@@ -170,11 +170,12 @@ export default function EducatorManageProfile() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
+                    <label htmlFor="edu-profile-prenom" className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
                       <User className="w-4 h-4 text-slate-500" />
                       Prénom
                     </label>
                     <input
+                      id="edu-profile-prenom"
                       type="text"
                       name="prenom"
                       value={form.prenom ?? ''}
@@ -185,11 +186,12 @@ export default function EducatorManageProfile() {
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
+                    <label htmlFor="edu-profile-nom" className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
                       <User className="w-4 h-4 text-slate-500" />
                       Nom
                     </label>
                     <input
+                      id="edu-profile-nom"
                       type="text"
                       name="nom"
                       value={form.nom ?? ''}
@@ -201,11 +203,12 @@ export default function EducatorManageProfile() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
+                  <label htmlFor="edu-profile-email" className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
                     <Mail className="w-4 h-4 text-slate-500" />
-                    Email
+                    E-mail
                   </label>
                   <input
+                    id="edu-profile-email"
                     type="email"
                     value={profile.email ?? ''}
                     readOnly
@@ -214,11 +217,12 @@ export default function EducatorManageProfile() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
+                  <label htmlFor="edu-profile-telephone" className="text-sm font-medium text-slate-700 flex items-center gap-2 mb-1.5">
                     <Phone className="w-4 h-4 text-slate-500" />
                     Téléphone
                   </label>
                   <input
+                    id="edu-profile-telephone"
                     type="text"
                     name="telephone"
                     value={form.telephone ?? ''}

@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Calendar, Edit, Loader2, Tag, Target, Zap, Clock, Gamepad2, ShieldCheck, AlertTriangle, Sparkles } from 'lucide-react';
+import { ArrowLeft, Calendar, Edit, Loader2, Tag, Target, Zap, Clock, Gamepad2, ShieldCheck, AlertTriangle, Sparkles, RefreshCw, PowerOff } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import adminApi from '@/api/admin';
 import educatorApi from '@/api/educator/educator.api';
-import type { GameDTO, EtatJeu, QuizQuestionDTO, MemoryCardDTO, GameAiReviewDTO, LogicPuzzleDTO, ReflexSettingsDTO } from '@/api/types';
+import type { GameDTO, Difficulte, EtatJeu, QuizQuestionDTO, MemoryCardDTO, GameAiReviewDTO, LogicPuzzleDTO, ReflexSettingsDTO } from '@/api/types';
 import RejectGameModal from '@/components/admin/RejectGameModal';
+import { enumLabelFr } from '@/utils/frLabels';
 
 const TYPE_ICONS: Record<string, string> = {
   QUIZ: '🧮',
@@ -31,6 +32,7 @@ function formatDateTime(dateStr: string | null): string {
   }
 }
 
+/** Difficulté au niveau question/puzzle (échelle numérique 0-10, distincte de celle du jeu). */
 function difficultyLabel(d: number | null): string {
   if (d == null) return '—';
   if (d <= 3) return 'Facile';
@@ -38,9 +40,16 @@ function difficultyLabel(d: number | null): string {
   return 'Difficile';
 }
 
+/** Difficulté au niveau jeu (backend enum Difficulte). */
+function gameDifficultyLabel(d: Difficulte | null): string {
+  if (d === 'FACILE') return 'Facile';
+  if (d === 'MOYEN') return 'Moyen';
+  if (d === 'DIFFICILE') return 'Difficile';
+  return '—';
+}
+
 function formatLabel(value: string | null | undefined): string {
-  if (!value) return '—';
-  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+  return enumLabelFr(value);
 }
 
 export default function GameDetail() {
@@ -52,6 +61,8 @@ export default function GameDetail() {
   const [contentError, setContentError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [updatingReactivation, setUpdatingReactivation] = useState(false);
+  const [showRejectReactivationModal, setShowRejectReactivationModal] = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDTO[]>([]);
   const [memoryCards, setMemoryCards] = useState<MemoryCardDTO[]>([]);
@@ -122,6 +133,35 @@ export default function GameDetail() {
       toast.error('Erreur lors de la mise à jour du statut');
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  const handleAcceptReactivation = async () => {
+    if (!game) return;
+    setUpdatingReactivation(true);
+    try {
+      const res = await adminApi.acceptReactivation(game.id);
+      setGame(res.data as GameDTO);
+      toast.success('Jeu réactivé — l\'éducateur a été notifié');
+    } catch (err) {
+      toast.error('Erreur lors de la réactivation du jeu');
+    } finally {
+      setUpdatingReactivation(false);
+    }
+  };
+
+  const submitRejectReactivation = async (reason: string) => {
+    if (!game) return;
+    setUpdatingReactivation(true);
+    try {
+      const res = await adminApi.rejectReactivation(game.id, reason);
+      setGame(res.data as GameDTO);
+      toast.success('Demande de réactivation refusée — l\'éducateur a été notifié');
+      setShowRejectReactivationModal(false);
+    } catch {
+      toast.error('Erreur lors du refus de la réactivation');
+    } finally {
+      setUpdatingReactivation(false);
     }
   };
 
@@ -218,7 +258,7 @@ export default function GameDetail() {
         const status = err?.response?.status;
         const serverMessage = err?.response?.data?.message || err?.message;
         if (status === 403) {
-          setContentError('Accès refusé admin => contenu (403). Essayez /educator pour vérifier le role.');
+          setContentError('Accès refusé admin => contenu (403). Essayez /educator pour vérifier le rôle.');
         } else {
           setContentError(`Impossible de charger le contenu du jeu. ${serverMessage ?? ''}`);
         }
@@ -295,13 +335,34 @@ export default function GameDetail() {
             </button>
           </div>
         )}
+        {game?.reactivationPending && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowRejectReactivationModal(true)}
+              disabled={updatingReactivation}
+              className="px-3 py-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 text-sm font-semibold hover:bg-rose-100 disabled:opacity-60"
+            >
+              {updatingReactivation ? 'Traitement...' : 'Refuser la réactivation'}
+            </button>
+            <button
+              type="button"
+              onClick={handleAcceptReactivation}
+              disabled={updatingReactivation}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm font-semibold hover:bg-sky-100 disabled:opacity-60"
+            >
+              {updatingReactivation ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              {updatingReactivation ? 'Traitement...' : 'Accepter la réactivation'}
+            </button>
+          </div>
+        )}
         </div>
       </div>
 
       {/* En-tête gradient */}
       <div className="h-28 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-violet-500 to-cyan-500 flex items-center p-6 mb-6 shadow-lg">
         <div className="w-16 h-16 rounded-2xl bg-white/95 shadow-lg flex items-center justify-center text-3xl ring-2 ring-white/50 shrink-0">
-          {game.icone ?? TYPE_ICONS[game.typeJeu] ?? '🎮'}
+          {TYPE_ICONS[game.typeJeu] ?? '🎮'}
         </div>
         <div className="ml-4 flex-1 min-w-0">
           <div className="flex items-center justify-between gap-4">
@@ -339,6 +400,35 @@ export default function GameDetail() {
               <p className="text-sm text-rose-800 whitespace-pre-wrap">{game.latestRefusalReason}</p>
             </div>
           )}
+
+          {!game.actif && game.etat === 'ACCEPTE' && game.latestDeactivationReason && (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-rose-700 mb-1 inline-flex items-center gap-1.5">
+                <PowerOff className="w-3.5 h-3.5" />
+                Détails de la désactivation
+              </p>
+              <p className="text-sm text-rose-800 whitespace-pre-wrap">{game.latestDeactivationReason}</p>
+            </div>
+          )}
+
+          {game.reactivationPending && (
+            <div className="mt-4 rounded-xl border border-sky-200 bg-sky-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-sky-700 mb-1 inline-flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5" />
+                Réactivation demandée
+              </p>
+              <p className="text-sm text-sky-800">
+                L'éducateur a corrigé ce jeu et demande sa réactivation. Utilisez les boutons en haut de page pour accepter ou refuser.
+              </p>
+            </div>
+          )}
+
+          {!game.actif && !game.reactivationPending && game.latestReactivationRejectionReason && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 mb-1">Précédente demande de réactivation refusée</p>
+              <p className="text-sm text-amber-900 whitespace-pre-wrap">{game.latestReactivationRejectionReason}</p>
+            </div>
+          )}
         </motion.section>
 
         {/* Infos 2×3 — même hauteur que la description */}
@@ -358,6 +448,9 @@ export default function GameDetail() {
                 <p className={`font-semibold ${game.actif ? 'text-green-700' : 'text-gray-600'}`}>
                   {game.actif ? 'Visible pour les joueurs' : 'Masqué'}
                 </p>
+                {game.reactivationPending && (
+                  <p className="text-xs font-semibold text-sky-700 mt-0.5">Réactivation demandée</p>
+                )}
               </div>
             </div>
             <div className="p-6 flex items-center gap-4">
@@ -366,7 +459,7 @@ export default function GameDetail() {
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Difficulté</p>
-                <p className="font-semibold text-gray-900 text-lg">{difficultyLabel(game.difficulte)}</p>
+                <p className="font-semibold text-gray-900 text-lg">{gameDifficultyLabel(game.difficulte)}</p>
               </div>
             </div>
             <div className="p-6 flex items-center gap-4">
@@ -596,7 +689,7 @@ export default function GameDetail() {
                           {c ? (
                             <div className="flex flex-col items-center leading-none">
                               {c.cardType === 'IMAGE' && c.cardValue ? (
-                                <img src={c.cardValue} alt="memory-card" className="w-12 h-12 object-cover rounded-lg border border-slate-200" />
+                                <img src={c.cardValue} alt="Carte mémoire" className="w-12 h-12 object-cover rounded-lg border border-slate-200" />
                               ) : c.cardType === 'COLOR' && c.cardValue ? (
                                 <span className="w-8 h-8 rounded-full border-2 border-slate-300" style={{ backgroundColor: c.cardValue }} />
                               ) : c.cardType === 'TEXT' && c.cardValue ? (
@@ -674,7 +767,7 @@ export default function GameDetail() {
                   </p>
                 </div>
                 <div className="p-4 rounded-xl border border-slate-200 bg-white shadow-sm">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider">No-go ratio</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wider">Ratio « ne pas aller »</p>
                   <p className="font-semibold text-gray-900 mt-1">
                     {reflexSettings.noGoRatio != null ? `${reflexSettings.noGoRatio}%` : '—'}
                   </p>
@@ -696,6 +789,16 @@ export default function GameDetail() {
         submitting={updatingStatus}
         onClose={() => setShowRejectModal(false)}
         onConfirm={submitReject}
+      />
+      <RejectGameModal
+        open={showRejectReactivationModal}
+        gameTitle={game.titre}
+        submitting={updatingReactivation}
+        title="Refuser la réactivation du jeu"
+        placeholder="Ex: Le contenu signalé n'a pas été suffisamment corrigé..."
+        confirmLabel="Confirmer le refus de réactivation"
+        onClose={() => setShowRejectReactivationModal(false)}
+        onConfirm={submitRejectReactivation}
       />
     </div>
   );

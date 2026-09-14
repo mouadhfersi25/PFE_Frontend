@@ -1,9 +1,7 @@
 // Types (données réelles via API)
 // UserDTO et types requêtes/réponses API : @/api/types
 
-import type { QuizPlayMode } from '@/api/types';
-
-export type { UserDTO, QuizPlayMode } from '@/api/types';
+export type { UserDTO } from '@/api/types';
 
 export interface User {
   id: string;
@@ -31,9 +29,11 @@ export interface PlayerProfile {
   onboardingCompleted?: boolean;
   idRegion?: number | null;
   idPays?: number | null;
-  idGenre?: number | null;
+  genre?: string | null;
   paysNom?: string;
   regionNom?: string;
+  /** Pays choisi par le compte PARENT à son inscription (valeur par défaut pour l'onboarding). */
+  parentPaysNom?: string | null;
   niveau?: number;
   scoreTotal?: number;
   pointsExperience?: number;
@@ -64,7 +64,6 @@ export interface Game {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   estimatedTime: string;
   durationMinutes?: number;
-  quizPlayMode?: QuizPlayMode;
   quizVariant?: string;
   icon: string;
   coverImageUrl?: string;

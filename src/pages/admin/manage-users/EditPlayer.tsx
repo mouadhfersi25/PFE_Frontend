@@ -134,8 +134,9 @@ export default function EditPlayer() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
+              <label htmlFor="player-role" className="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
               <select
+                id="player-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"

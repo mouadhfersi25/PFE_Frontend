@@ -3,10 +3,15 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock, RotateCcw } from 'lucide-react';
 import userApi from '@/api/user/user.api';
+import { forfeitRoom } from '@/services/roomService';
+import { useRoomBeaconOnUnload } from '@/hooks/useRoomBeaconOnUnload';
 import PlayerHeaderActions from '@/components/player/PlayerHeaderActions';
+import FullscreenToggleButton from '@/components/player/FullscreenToggleButton';
 import { exitFullscreenSafely } from '@/utils/fullscreen';
 import type { MemoryCardDTO } from '@/api/types';
 import { getMemoryPlayerHint } from '@/constants/memoryPairTypes';
+import InGameAdOverlay from '@/components/player/InGameAdOverlay';
+import { useInGameAd } from '@/hooks/useInGameAd';
 
 interface Card {
   id: number;
@@ -25,6 +30,7 @@ export default function MemoryGame() {
   const location = useLocation();
   const { gameId } = useParams();
   const { game, mode, roomCode } = location.state || {};
+  useRoomBeaconOnUnload(mode === 'Online', roomCode, 'forfeit');
   const [memoryCards, setMemoryCards] = useState<MemoryCardDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -64,6 +70,13 @@ export default function MemoryGame() {
     if (keys.size > 0) return keys.size;
     return Math.floor(memoryCards.length / 2);
   }, [memoryCards]);
+
+  const [gameOver, setGameOver] = useState(false);
+  const pendingResultRef = useRef<{ sessionData: Record<string, unknown> } | null>(null);
+  const { ad, visible: adVisible, ready: adReady, dismiss: dismissAd, openCta } = useInGameAd(
+    gameId,
+    gameOver
+  );
 
   const gridColsClass = useMemo(() => {
     if (cards.length <= 4) return 'grid-cols-2';
@@ -133,6 +146,8 @@ export default function MemoryGame() {
     setShowMatchFeedback(false);
     setRecentMatchedCardIds([]);
     isFinishingRef.current = false;
+    pendingResultRef.current = null;
+    setGameOver(false);
   };
 
   useEffect(() => {
@@ -142,36 +157,48 @@ export default function MemoryGame() {
 
   // Timer
   useEffect(() => {
-    if (!gameStarted || matches >= totalPairs || timeLeft <= 0) return;
+    if (!gameStarted || matches >= totalPairs || timeLeft <= 0 || adVisible || gameOver) return;
     const timer = setTimeout(() => {
       setTimeElapsed((prev) => prev + 1);
       setTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearTimeout(timer);
-  }, [gameStarted, matches, totalPairs, timeLeft]);
+  }, [gameStarted, matches, totalPairs, timeLeft, adVisible, gameOver]);
 
+  /**
+   * Marque la partie comme terminée : la pub sponsor (si dispo) s'affiche à ce moment précis,
+   * juste avant le résultat. La navigation réelle n'a lieu qu'une fois la pub vue/fermée
+   * (cf. l'effet ci-dessous qui observe `adReady`).
+   */
   const finishGame = async (forcedTimeout = false) => {
     if (isFinishingRef.current) return;
     isFinishingRef.current = true;
     const accuracy = moves > 0 ? Math.round((matches * 2 / moves) * 100) : 0;
     const score = Math.max(200 - moves * 2 - Math.floor(timeElapsed / 5), 50);
-    await exitFullscreenSafely();
-    navigate('/player/game-result', {
-      state: {
-        game,
-        mode,
-        roomCode,
-        sessionData: {
-          scoreFinal: score,
-          accuracy: Math.min(accuracy, 100),
-          durationSeconds: Math.max(1, timeElapsed),
-          reussite: forcedTimeout ? false : accuracy >= 70,
-          moves,
-          matches,
-        },
+    pendingResultRef.current = {
+      sessionData: {
+        scoreFinal: score,
+        accuracy: Math.min(accuracy, 100),
+        durationSeconds: Math.max(1, timeElapsed),
+        reussite: forcedTimeout ? false : accuracy >= 70,
+        moves,
+        matches,
       },
-    });
+    };
+    setGameOver(true);
   };
+
+  useEffect(() => {
+    if (!gameOver || !adReady || !pendingResultRef.current) return;
+    const pending = pendingResultRef.current;
+    pendingResultRef.current = null;
+    void (async () => {
+      await exitFullscreenSafely();
+      navigate('/player/game-result', {
+        state: { game, mode, roomCode, sessionData: pending.sessionData },
+      });
+    })();
+  }, [gameOver, adReady, game, mode, roomCode, navigate]);
 
   useEffect(() => {
     if (gameStarted && matches < totalPairs && timeLeft === 0) {
@@ -289,6 +316,9 @@ export default function MemoryGame() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      {ad && adVisible ? (
+        <InGameAdOverlay ad={ad} onContinue={dismissAd} onCtaClick={openCta} />
+      ) : null}
       {/* Header */}
       <header className="bg-slate-950/75 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -299,6 +329,7 @@ export default function MemoryGame() {
                 whileTap={{ scale: 0.9 }}
                 onClick={() => {
                   if (window.confirm('Quitter la partie ?')) {
+                    if (mode === 'Online' && roomCode) void forfeitRoom(roomCode);
                     navigate('/player/dashboard');
                   }
                 }}
@@ -321,6 +352,7 @@ export default function MemoryGame() {
                 <RotateCcw className="w-4 h-4" />
                 <span className="font-medium">Recommencer</span>
               </motion.button>
+              <FullscreenToggleButton />
               <PlayerHeaderActions />
             </div>
           </div>

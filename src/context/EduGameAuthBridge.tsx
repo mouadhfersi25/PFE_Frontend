@@ -19,8 +19,12 @@ interface AuthContextType {
 const EduGameAuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function getStoreUserWithFallback(storeUser: { email?: string; role?: string } | null): { email: string; role: string } | null {
-  const email = storeUser?.email ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('auth_email') : null);
-  const role = storeUser?.role ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('auth_role') : null);
+  let email = storeUser?.email ?? null;
+  let role = storeUser?.role ?? null;
+  if (typeof localStorage !== 'undefined') {
+    email = email || localStorage.getItem('auth_email') || sessionStorage.getItem('auth_email');
+    role = role || localStorage.getItem('auth_role') || sessionStorage.getItem('auth_role');
+  }
   if (!email) return null;
   return { email, role: role || '' };
 }
@@ -73,6 +77,49 @@ function fallbackXpToNextLevel(levelRaw?: number | null): number {
   return Math.max(250, (level * 150) + (level * level * 55));
 }
 
+function buildMinimalPlayerProfile(user: User): PlayerProfile {
+  const localFallback = getLocalProfileFallback();
+  return {
+    id: user.id,
+    name: user.name,
+    age: 12,
+    avatar: localFallback.avatar || '👦',
+    nom: '',
+    prenom: '',
+    email: user.email,
+    telephone: null,
+    avatarUrl: null,
+    role: 'JOUEUR',
+    etatCompte: 'ACTIF',
+    enabled: true,
+    dateDeNaissance: null,
+    onboardingCompleted: false,
+    idRegion: null,
+    idPays: null,
+    genre: null,
+    paysNom: localFallback.paysNom || '',
+    regionNom: localFallback.regionNom || '',
+    niveau: 1,
+    scoreTotal: 0,
+    pointsExperience: 0,
+    currentStreakDays: 0,
+    bestStreakDays: 0,
+    lastStreakDate: null,
+    dateDerniereConnexion: null,
+    dateCreation: null,
+    level: 1,
+    xp: 0,
+    xpToNextLevel: fallbackXpToNextLevel(1),
+    totalScore: 0,
+    badgesEarned: 0,
+    currentStreak: 0,
+    totalSessions: 0,
+    weeklyPlayTime: '0 min',
+    averageSuccessRate: 0,
+    skills: { math: 0, logic: 0, memory: 0, reflex: 0 },
+  };
+}
+
 export function EduGameAuthBridge({ children }: { children: ReactNode }) {
   const storeAuth = useContext(StoreAuthContext);
   const user = useMemo(() => mapStoreUserToEduGameUser(storeAuth?.user ?? null), [storeAuth?.user]);
@@ -87,8 +134,7 @@ export function EduGameAuthBridge({ children }: { children: ReactNode }) {
       const fullName = [u.prenom, u.nom].filter(Boolean).join(' ').trim();
       const computedAge = computeAgeFromDateOfBirth(u.dateDeNaissance);
 
-      setPlayerProfile((prev) => ({
-        ...prev!,
+      setPlayerProfile({
         id: u.id || user.id,
         name: fullName || u.name || user.name,
         age: u.age || computedAge || 12,
@@ -105,9 +151,10 @@ export function EduGameAuthBridge({ children }: { children: ReactNode }) {
         onboardingCompleted: u.onboardingCompleted,
         idRegion: u.idRegion ?? null,
         idPays: u.idPays ?? null,
-        idGenre: u.idGenre ?? null,
+        genre: u.genre ?? null,
         paysNom: u.paysNom || localFallback.paysNom || '',
         regionNom: u.regionNom || localFallback.regionNom || '',
+        parentPaysNom: u.parentPaysNom ?? null,
         niveau: u.niveau || 1,
         scoreTotal: u.scoreTotal || 0,
         pointsExperience: u.pointsExperience || 0,
@@ -129,19 +176,22 @@ export function EduGameAuthBridge({ children }: { children: ReactNode }) {
         weeklyPlayTime: '0 min',
         averageSuccessRate: 0,
         skills: { math: 0, logic: 0, memory: 0, reflex: 0 },
-      }));
+      });
     } catch (err) {
       console.error("Failed to refresh user", err);
+      // Évite l'écran blanc si /me échoue : profil minimal pour afficher le dashboard
+      setPlayerProfile((prev) => prev ?? buildMinimalPlayerProfile(user));
     }
   };
 
-  // Initialiser un profil joueur par défaut dès qu'un user JOUEUR est connecté
+  // Initialiser un profil joueur dès qu'un JOUEUR est connecté (fallback immédiat)
   useEffect(() => {
     if (!user || user.role !== 'player') {
       setPlayerProfile(null);
       return;
     }
-    refreshUser();
+    setPlayerProfile((prev) => prev ?? buildMinimalPlayerProfile(user));
+    void refreshUser();
   }, [user]);
 
   const value = useMemo<AuthContextType>(

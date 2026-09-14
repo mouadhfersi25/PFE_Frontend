@@ -112,7 +112,8 @@ export default function Profile() {
       ...prev,
       name: playerProfile.name || prev.name,
       age: playerProfile.age || prev.age,
-      paysNom: playerProfile.paysNom || '',
+      // Par défaut, le pays choisi par le parent à son inscription (modifiable ensuite).
+      paysNom: playerProfile.paysNom || playerProfile.parentPaysNom || '',
       regionNom: playerProfile.regionNom || '',
       email: user?.email || prev.email,
     }));
@@ -160,37 +161,79 @@ export default function Profile() {
       const regionNom = formData.regionNom.trim();
       const hasLocation = Boolean(paysNom && regionNom);
       const avatarToSave = selectedAvatar.trim() || undefined;
+      const nameTrimmed = formData.name.trim();
+      const isOnboardingFlow =
+        new URLSearchParams(location.search).get('onboarding') === 'true' ||
+        playerProfile?.onboardingCompleted === false;
+
+      // Validation du changement de mot de passe avant tout appel réseau.
+      const wantsPasswordChange = Boolean(formData.newPassword || formData.confirmPassword);
+      if (wantsPasswordChange) {
+        if (!formData.currentPassword) {
+          toast.error('Veuillez saisir votre mot de passe actuel');
+          setLoading(false);
+          return;
+        }
+        if (formData.newPassword !== formData.confirmPassword) {
+          toast.error('Les mots de passe ne correspondent pas');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Nom complet + avatar : envoyés à /users/update-profile
+      // (le nom est découpé en prénom / nom pour correspondre au modèle backend).
+      if (nameTrimmed || avatarToSave) {
+        const profilePayload: Record<string, unknown> = {};
+        if (nameTrimmed) {
+          const nameParts = nameTrimmed.split(/\s+/).filter(Boolean);
+          profilePayload.prenom = nameParts[0];
+          profilePayload.nom = nameParts.slice(1).join(' ') || nameParts[0];
+        }
+        if (avatarToSave) {
+          profilePayload.avatarUrl = avatarToSave;
+        }
+        await userApi.updateProfile(profilePayload);
+        if (avatarToSave && typeof localStorage !== 'undefined') {
+          localStorage.setItem('player_avatar', avatarToSave);
+        }
+        updatePlayerProfile({
+          ...(nameTrimmed ? { name: nameTrimmed } : {}),
+          ...(avatarToSave ? { avatar: avatarToSave } : {}),
+        });
+      }
+
+      // Mot de passe : envoyé à /users/change-password
+      if (wantsPasswordChange) {
+        await userApi.changePassword({
+          currentPassword: formData.currentPassword,
+          newPassword: formData.newPassword,
+        });
+        setFormData((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+      }
 
       // Enregistrer la localisation dès qu'elle est renseignée
       // (premier onboarding ou mise à jour ultérieure du profil).
       if (hasLocation) {
-        await userApi.completeOnboarding({
-          paysNom,
-          regionNom,
-          ...(avatarToSave ? { avatarUrl: avatarToSave } : {}),
-        });
-        if (avatarToSave) {
-          await userApi.updateProfile({ avatarUrl: avatarToSave });
-        }
+        await userApi.completeOnboarding({ paysNom, regionNom });
         if (typeof localStorage !== 'undefined') {
           localStorage.setItem('player_pays_nom', paysNom);
           localStorage.setItem('player_region_nom', regionNom);
-          if (avatarToSave) {
-            localStorage.setItem('player_avatar', avatarToSave);
-          }
         }
         updatePlayerProfile({
           paysNom,
           regionNom,
-          ...(avatarToSave ? { avatar: avatarToSave } : {}),
           onboardingCompleted: true,
         });
-      } else if (avatarToSave) {
-        await userApi.updateProfile({ avatarUrl: avatarToSave });
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem('player_avatar', avatarToSave);
+
+        // Après l'onboarding : redirection immédiate vers le dashboard
+        if (isOnboardingFlow) {
+          setIsEditing(false);
+          setIsTourActive(false);
+          toast.success('Profil prêt ! Bienvenue sur ton tableau de bord.');
+          navigate('/player/dashboard', { replace: true, state: { fromOnboarding: true } });
+          return;
         }
-        updatePlayerProfile({ avatar: avatarToSave });
       }
 
       toast.success('Profil mis à jour avec succès !');
@@ -207,14 +250,6 @@ export default function Profile() {
       }
       setIsEditing(false);
       setIsTourActive(false);
-
-      const isOnboardingFlow =
-        new URLSearchParams(location.search).get('onboarding') === 'true' ||
-        !playerProfile?.onboardingCompleted;
-      if (isOnboardingFlow && hasLocation) {
-        navigate('/player/dashboard', { replace: true });
-        return;
-      }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Erreur lors de la mise à jour'));
     } finally {
@@ -240,13 +275,22 @@ export default function Profile() {
     {
       targetId: 'profile-header',
       title: 'Terminer',
-      content: 'Félicitations ! Votre profil est prêt. Cliquez sur Enregistrer en haut à droite pour valider vos informations et commencer l\'aventure !',
+      content: 'Félicitations ! Votre profil est prêt. Cliquez sur Enregistrer pour valider et accéder directement à votre tableau de bord.',
       position: 'bottom',
       disableNext: !formData.paysNom || !formData.regionNom
     }
   ];
 
-  if (!playerProfile) return null;
+  if (!playerProfile) {
+    return (
+      <div className="min-h-screen bg-[#090f2b] text-white flex items-center justify-center">
+        <div className="text-center text-slate-300">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          Chargement du profil…
+        </div>
+      </div>
+    );
+  }
 
   const totalSessions = progressOverview?.totalSessions ?? playerProfile.totalSessions ?? 0;
   const totalScore = playerProfile.scoreTotal ?? playerProfile.totalScore ?? 0;
@@ -418,11 +462,12 @@ export default function Profile() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Name */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                  <label htmlFor="profile-name" className="block text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
                     <UserIcon className="w-4 h-4" />
                     Nom complet
                   </label>
                   <input
+                    id="profile-name"
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -433,32 +478,42 @@ export default function Profile() {
 
                 {/* Age */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                  <label htmlFor="profile-age" className="block text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
                     Âge
                   </label>
                   <input
+                    id="profile-age"
                     type="number"
                     value={formData.age}
                     onChange={(e) => setFormData({ ...formData, age: parseInt(e.target.value) })}
-                    disabled={!isEditing}
+                    disabled
+                    title="La modification de l'âge n'est pas encore disponible"
                     className="w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-white/5 disabled:text-slate-400 transition-all"
                   />
+                  {isEditing && (
+                    <p className="mt-1 text-xs text-slate-400">Non modifiable pour le moment.</p>
+                  )}
                 </div>
 
                 {/* Email */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
+                  <label htmlFor="profile-email" className="block text-sm font-medium text-slate-200 mb-2 flex items-center gap-2">
                     <Mail className="w-4 h-4" />
-                    Adresse Email
+                    Adresse e-mail
                   </label>
                   <input
+                    id="profile-email"
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    disabled={!isEditing}
+                    disabled
+                    title="La modification de l'e-mail n'est pas encore disponible"
                     className="w-full px-4 py-3 rounded-xl border border-white/20 bg-white/10 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:bg-white/5 disabled:text-slate-400 transition-all"
                   />
+                  {isEditing && (
+                    <p className="mt-1 text-xs text-slate-400">Non modifiable pour le moment.</p>
+                  )}
                 </div>
               </div>
 
@@ -470,11 +525,12 @@ export default function Profile() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <label htmlFor="profile-pays" className="block text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
                       <Globe className="w-3 h-3" />
                       Pays
                     </label>
                     <select
+                      id="profile-pays"
                       value={formData.paysNom}
                       onChange={(e) => setFormData({ ...formData, paysNom: e.target.value, regionNom: '' })}
                       disabled={!isEditing || loadingGeo}
@@ -487,11 +543,12 @@ export default function Profile() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <label htmlFor="profile-region" className="block text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
                       <Map className="w-3 h-3" />
                       Région / État
                     </label>
                     <select
+                      id="profile-region"
                       value={formData.regionNom}
                       onChange={(e) => setFormData({ ...formData, regionNom: e.target.value })}
                       disabled={!isEditing || !formData.paysNom || loadingRegions}
@@ -515,11 +572,12 @@ export default function Profile() {
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-slate-200 mb-2">
+                      <label htmlFor="profile-currentPassword" className="block text-sm font-medium text-slate-200 mb-2">
                         Mot de passe actuel
                       </label>
                       <div className="relative">
                         <input
+                          id="profile-currentPassword"
                           type={showPassword ? 'text' : 'password'}
                           value={formData.currentPassword}
                           onChange={(e) =>
@@ -537,10 +595,11 @@ export default function Profile() {
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-200 mb-2">
+                      <label htmlFor="profile-newPassword" className="block text-sm font-medium text-slate-200 mb-2">
                         Nouveau mot de passe
                       </label>
                       <input
+                        id="profile-newPassword"
                         type={showPassword ? 'text' : 'password'}
                         value={formData.newPassword}
                         onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
@@ -548,10 +607,11 @@ export default function Profile() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-200 mb-2">
+                      <label htmlFor="profile-confirmPassword" className="block text-sm font-medium text-slate-200 mb-2">
                         Confirmer
                       </label>
                       <input
+                        id="profile-confirmPassword"
                         type={showPassword ? 'text' : 'password'}
                         value={formData.confirmPassword}
                         onChange={(e) =>
@@ -591,7 +651,9 @@ export default function Profile() {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  Enregistrer
+                  {new URLSearchParams(location.search).get('onboarding') === 'true'
+                    ? 'Terminer et aller au dashboard'
+                    : 'Enregistrer'}
                 </motion.button>
               </div>
             )}

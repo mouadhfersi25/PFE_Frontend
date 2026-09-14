@@ -5,14 +5,21 @@ import storage from "../utils/storage";
 const TOKEN_KEY = "jwt_token";
 
 export const authService = {
-  async login(data: Record<string, unknown>) {
+  async login(data: Record<string, unknown>, remember = true) {
     const res = await authApi.login(data);
     const responseData = res.data as Record<string, unknown>;
+    storage.setRemember(remember);
     const token = (responseData.accessToken ?? responseData.token) as string | undefined;
-    if (token) storage.set(TOKEN_KEY, token);
-    if (responseData.role != null && responseData.role !== "")
+    if (!token) {
+      throw new Error("Réponse de connexion invalide (jeton manquant)");
+    }
+    storage.set(TOKEN_KEY, token);
+    if (responseData.role != null && responseData.role !== "") {
       storage.set("auth_role", String(responseData.role).toUpperCase());
-    if (responseData.email) storage.set("auth_email", responseData.email as string);
+    }
+    if (responseData.email) {
+      storage.set("auth_email", String(responseData.email));
+    }
     return responseData;
   },
 

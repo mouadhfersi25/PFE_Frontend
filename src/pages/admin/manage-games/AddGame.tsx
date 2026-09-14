@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAdminData } from '@/context';
 import type { Game } from '@/data/types';
-import type { CreateGameRequest, TypeJeu, ModeJeu } from '@/api/types';
+import type { CreateGameRequest, Difficulte, TypeJeu, ModeJeu } from '@/api/types';
 import adminApi from '@/api/admin';
 import { InputField, SelectField, TextareaField } from '@/components/forms/FormFields';
 import {
@@ -16,8 +16,6 @@ import {
   type ValidationResult,
 } from '@/utils/formValidation';
 
-const icons = ['🎮', '🧮', '🧠', '🎯', '⚡', '🔬', '🦁', '🌟', '🚀', '🎨'];
-
 const FORM_TYPE_TO_TYPE_JEU: Record<Game['type'], TypeJeu> = {
   quiz: 'QUIZ',
   memory: 'MEMOIRE',
@@ -25,10 +23,10 @@ const FORM_TYPE_TO_TYPE_JEU: Record<Game['type'], TypeJeu> = {
   reflex: 'REFLEXE',
 };
 
-const DIFFICULTY_TO_NUMBER: Record<Game['difficulty'], number> = {
-  Easy: 2,
-  Medium: 5,
-  Hard: 8,
+const DIFFICULTY_TO_API: Record<Game['difficulty'], Difficulte> = {
+  Easy: 'FACILE',
+  Medium: 'MOYEN',
+  Hard: 'DIFFICILE',
 };
 
 export default function AddGame() {
@@ -44,7 +42,6 @@ export default function AddGame() {
     ageMax: number | '';
     difficulty: Game['difficulty'] | '';
     estimatedTime: string;
-    icon: string;
     actif: boolean;
   }>({
     title: '',
@@ -55,7 +52,6 @@ export default function AddGame() {
     ageMax: 18,
     difficulty: '',
     estimatedTime: '',
-    icon: '',
     actif: true,
   });
   const [submitting, setSubmitting] = useState(false);
@@ -65,13 +61,12 @@ export default function AddGame() {
   const buildRequest = (): CreateGameRequest => ({
     titre: formData.title.trim(),
     description: formData.description.trim() || undefined,
-    difficulte: DIFFICULTY_TO_NUMBER[formData.difficulty as Game['difficulty']],
+    difficulte: DIFFICULTY_TO_API[formData.difficulty as Game['difficulty']],
     ageMin: Number(formData.ageMin),
     ageMax: Number(formData.ageMax),
     typeJeu: FORM_TYPE_TO_TYPE_JEU[formData.type as Game['type']],
     modeJeu: formData.mode as ModeJeu,
     dureeMinutes: parseInt(formData.estimatedTime, 10) || 15,
-    icone: formData.icon || undefined,
     actif: formData.actif,
   });
 
@@ -94,7 +89,6 @@ export default function AddGame() {
       { field: 'ageMin', message: ageMinErr },
       { field: 'ageMax', message: ageMaxErr },
       { field: 'estimatedTime', message: estimatedTimeErr },
-      { field: 'icon', message: validateRequired(formData.icon, 'Choisissez une icône') },
     ];
     const next = runValidations(rules);
     setErrors(next);
@@ -208,9 +202,9 @@ export default function AddGame() {
               >
                   <option value="">— Choisir —</option>
                   <option value="quiz">Quiz</option>
-                  <option value="memory">Memory</option>
-                  <option value="logic">Logic</option>
-                  <option value="reflex">Reflex</option>
+                  <option value="memory">Mémoire</option>
+                  <option value="logic">Logique</option>
+                  <option value="reflex">Réflexe</option>
               </SelectField>
               <SelectField
                 label="Mode de jeu"
@@ -222,7 +216,7 @@ export default function AddGame() {
               >
                   <option value="">— Choisir —</option>
                   <option value="INDIVIDUEL">Individuel</option>
-                  <option value="EN_LIGNE">En ligne · chacun pour soi</option>
+                  <option value="EN_LIGNE">Multijoueur · chacun pour soi</option>
               </SelectField>
               <SelectField
                 label="Difficulté"
@@ -240,8 +234,9 @@ export default function AddGame() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div>
-                <label className={labelClass}>Âge min * (7–18)</label>
+                <label htmlFor="game-ageMin" className={labelClass}>Âge min * (7–18)</label>
                 <input
+                  id="game-ageMin"
                   type="number"
                   value={formData.ageMin === '' ? '' : formData.ageMin}
                   onChange={(e) => {
@@ -260,8 +255,9 @@ export default function AddGame() {
                 {errors.ageMin && <p className="mt-1 text-sm text-red-600">{errors.ageMin}</p>}
               </div>
               <div>
-                <label className={labelClass}>Âge max * (7–18)</label>
+                <label htmlFor="game-ageMax" className={labelClass}>Âge max * (7–18)</label>
                 <input
+                  id="game-ageMax"
                   type="number"
                   value={formData.ageMax === '' ? '' : formData.ageMax}
                   onChange={(e) => {
@@ -270,8 +266,10 @@ export default function AddGame() {
                     setFormData({ ...formData, ageMax: num }); setErrors((p) => ({ ...p, ageMax: '' }));
                   }}
                   onBlur={() => {
-                    const msg = formData.ageMax === '' ? 'L\'âge max est requis' : (validateInteger(Number(formData.ageMax), 7, 18, 'Âge max entre 7 et 18')
-                      ?? (formData.ageMin !== '' && formData.ageMax !== '' && formData.ageMin > formData.ageMax ? 'L\'âge max doit être ≥ âge min' : null));
+                    const ageMin = formData.ageMin === '' ? null : Number(formData.ageMin);
+                    const ageMax = formData.ageMax === '' ? null : Number(formData.ageMax);
+                    const msg = ageMax === null ? 'L\'âge max est requis' : (validateInteger(ageMax, 7, 18, 'Âge max entre 7 et 18')
+                      ?? (ageMin !== null && ageMin > ageMax ? 'L\'âge max doit être ≥ âge min' : null));
                     setErrors((p) => (msg ? { ...p, ageMax: msg } : { ...p, ageMax: '' }));
                   }}
                   className={`${inputClass} ${errors.ageMax ? 'border-red-500' : ''}`}
@@ -280,8 +278,9 @@ export default function AddGame() {
                 {errors.ageMax && <p className="mt-1 text-sm text-red-600">{errors.ageMax}</p>}
               </div>
               <div>
-                <label className={labelClass}>Durée (minutes) *</label>
+                <label htmlFor="game-estimatedTime" className={labelClass}>Durée (minutes) *</label>
                 <input
+                  id="game-estimatedTime"
                   type="number"
                   value={formData.estimatedTime}
                   onChange={(e) => { setFormData({ ...formData, estimatedTime: e.target.value }); setErrors((p) => ({ ...p, estimatedTime: '' })); }}
@@ -296,27 +295,6 @@ export default function AddGame() {
                 {errors.estimatedTime && <p className="mt-1 text-sm text-red-600">{errors.estimatedTime}</p>}
               </div>
             </div>
-          </section>
-
-          <section className="mb-8">
-            <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">
-              Icône *
-            </h2>
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-              {icons.map((icon) => (
-                <button
-                  key={icon}
-                  type="button"
-                  onClick={() => { setFormData({ ...formData, icon }); setErrors((p) => ({ ...p, icon: '' })); }}
-                  className={`w-12 h-12 flex items-center justify-center text-2xl rounded-xl border-2 transition-all ${
-                    formData.icon === icon ? 'border-orange-500 bg-orange-50 scale-105' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  {icon}
-                </button>
-              ))}
-            </div>
-            {errors.icon && <p className="mt-2 text-sm text-red-600">{errors.icon}</p>}
           </section>
 
           <section className="mb-8">

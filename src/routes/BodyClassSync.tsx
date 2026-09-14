@@ -1,7 +1,12 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
-const LEGACY_PATHS = ["/", "/login", "/register", "/forgot-password", "/reset-password", "/verify"];
+// "/login", "/register", "/forgot-password" et "/reset-password" ne sont plus
+// ici : ces quatre pages sont passées à AuthLayout (balisage Tailwind pur),
+// et le reset ci-dessous (body.page-legacy a, h1, ...) écrasait ses classes
+// utilitaires (padding, couleur, dégradé du titre) via une spécificité CSS
+// plus élevée.
+const LEGACY_PATHS = ["/", "/home", "/verify"];
 
 export default function BodyClassSync() {
   const location = useLocation();

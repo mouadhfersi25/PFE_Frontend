@@ -10,7 +10,7 @@ export const VOICE_SUBTYPE_OPTIONS = [
   {
     value: 'REPEAT_AFTER' as const,
     label: 'Répétition',
-    description: 'Le joueur répète la phrase après l’avoir lue.',
+    description: 'Le joueur écoute d’abord une voix modèle, puis répète la phrase.',
   },
 ];
 

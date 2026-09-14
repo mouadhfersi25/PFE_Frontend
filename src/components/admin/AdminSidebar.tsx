@@ -8,6 +8,7 @@ import {
   Award,
   ShieldCheck,
   BarChart3,
+  Megaphone,
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/context';
@@ -25,12 +26,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { name: 'Dashboard', path: '/admin/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { name: 'Manage Users', path: '/admin/players', icon: <Users className="w-5 h-5" /> },
-  { name: 'Manage Games', path: '/admin/games', icon: <Gamepad2 className="w-5 h-5" /> },
-  { name: 'Manage Badges', path: '/admin/badges', icon: <Award className="w-5 h-5" /> },
-  { name: 'Content Moderation', path: '/admin/moderation', icon: <ShieldCheck className="w-5 h-5" /> },
-  { name: 'Statistics', path: '/admin/statistics', icon: <BarChart3 className="w-5 h-5" /> },
+  { name: 'Tableau de bord', path: '/admin/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+  { name: 'Gérer les utilisateurs', path: '/admin/players', icon: <Users className="w-5 h-5" /> },
+  { name: 'Gérer les jeux', path: '/admin/games', icon: <Gamepad2 className="w-5 h-5" /> },
+  { name: 'Gérer les badges', path: '/admin/badges', icon: <Award className="w-5 h-5" /> },
+  { name: 'Modération', path: '/admin/moderation', icon: <ShieldCheck className="w-5 h-5" /> },
+  { name: 'Statistiques', path: '/admin/statistics', icon: <BarChart3 className="w-5 h-5" /> },
+  { name: 'Publicités sponsors', path: '/admin/ads', icon: <Megaphone className="w-5 h-5" /> },
 ];
 
 export default function AdminSidebar() {
@@ -153,7 +155,7 @@ export default function AdminSidebar() {
             type="button"
             onClick={handleLogout}
             className="p-2 rounded-lg text-violet-200 hover:text-rose-200 hover:bg-rose-500/20 transition-colors"
-            title="Log out"
+            title="Déconnexion"
           >
             <LogOut className="w-4 h-4" />
           </button>

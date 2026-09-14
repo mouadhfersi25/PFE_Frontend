@@ -4,7 +4,7 @@ import { ArrowLeft, Save, Loader2, Sparkles, Upload } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import educatorApi from '@/api/educator/educator.api';
-import type { TypeJeu, ModeJeu, QuizPlayMode, QuizVariant } from '@/api/types';
+import type { TypeJeu, ModeJeu, QuizVariant } from '@/api/types';
 import QuizVariantPicker from '@/components/educator/QuizVariantPicker';
 import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
@@ -17,8 +17,6 @@ import {
   type ValidationResult,
 } from '@/utils/formValidation';
 import { dataUrlToImageFile } from '@/utils/dataUrlToImageFile';
-
-const ICONS = ['🎮', '🧮', '🧠', '🎯', '⚡', '🔬', '🦁', '🌟', '🚀', '🎨'];
 
 const FORM_TYPE_TO_TYPE_JEU: Record<string, TypeJeu> = {
   quiz: 'QUIZ',
@@ -46,10 +44,17 @@ const TYPE_FIELD_PLACEHOLDERS: Record<string, { title: string; description: stri
   },
 };
 
-const DIFFICULTY_TO_NUMBER: Record<string, number> = {
+/** Utilisée uniquement pour l'aperçu de couverture IA (champ numérique indicatif, non persistant). */
+const DIFFICULTY_TO_WEIGHT: Record<string, number> = {
   Easy: 2,
   Medium: 5,
   Hard: 8,
+};
+
+const DIFFICULTY_TO_API: Record<string, 'FACILE' | 'MOYEN' | 'DIFFICILE'> = {
+  Easy: 'FACILE',
+  Medium: 'MOYEN',
+  Hard: 'DIFFICILE',
 };
 
 const FORM_TYPE_TO_TYPE_JEU_LITERAL = {
@@ -90,11 +95,9 @@ export default function EducatorAddGame() {
     ageMax: number | '';
     difficulty: string;
     estimatedTime: string;
-    icon: string;
     coverImageUrl: string;
     generateAiCover: boolean;
     actif: boolean;
-    quizPlayMode: QuizPlayMode;
     quizVariant: QuizVariant;
   }>({
     title: '',
@@ -105,11 +108,9 @@ export default function EducatorAddGame() {
     ageMax: 18,
     difficulty: '',
     estimatedTime: '',
-    icon: '',
     coverImageUrl: '',
     generateAiCover: true,
     actif: false,
-    quizPlayMode: 'CLASSIC',
     quizVariant: 'DEFAULT',
   });
 
@@ -161,7 +162,6 @@ export default function EducatorAddGame() {
       { field: 'ageMin', message: ageMinErr },
       { field: 'ageMax', message: ageMaxErr },
       { field: 'estimatedTime', message: estimatedTimeErr },
-      { field: 'icon', message: validateRequired(formData.icon, 'Choisissez une icône') },
     ];
     const next = runValidations(rules);
     setErrors(next);
@@ -180,17 +180,15 @@ export default function EducatorAddGame() {
       const created = await educatorApi.createGame({
         titre: formData.title.trim(),
         description: formData.description.trim() || undefined,
-        difficulte: DIFFICULTY_TO_NUMBER[formData.difficulty],
+        difficulte: DIFFICULTY_TO_API[formData.difficulty],
         ageMin: Number(formData.ageMin),
         ageMax: Number(formData.ageMax),
         typeJeu: FORM_TYPE_TO_TYPE_JEU[formData.type],
         modeJeu: formData.mode,
         dureeMinutes: parseInt(formData.estimatedTime, 10) || 15,
-        icone: formData.icon || undefined,
         // Ne pas envoyer une data URL en JSON (très lourd) : création légère puis upload multipart.
         coverImageUrl: isDataUrlCover ? undefined : coverTrim || undefined,
         actif: formData.actif,
-        quizPlayMode: formData.type === 'quiz' ? formData.quizPlayMode : 'CLASSIC',
         quizVariant: formData.type === 'quiz' ? formData.quizVariant : 'DEFAULT',
       });
 
@@ -202,10 +200,10 @@ export default function EducatorAddGame() {
           if (file) {
             await educatorApi.uploadGameCover(gameId, file);
           } else {
-            toast.warning('Jeu créé ; la cover n’a pas pu être envoyée. Réessayez depuis la fiche du jeu.');
+            toast.warning('Jeu créé ; l’image de couverture n’a pas pu être envoyée. Réessayez depuis la fiche du jeu.');
           }
         } catch {
-          toast.warning('Jeu créé ; échec de l’envoi de la cover. Réessayez depuis la fiche du jeu.');
+          toast.warning('Jeu créé ; échec de l’envoi de l’image de couverture. Réessayez depuis la fiche du jeu.');
         }
       }
 
@@ -214,7 +212,7 @@ export default function EducatorAddGame() {
         try {
           await educatorApi.generateGameCover(gameId);
         } catch {
-          toast.warning("Jeu créé, mais la génération automatique de cover a échoué.");
+          toast.warning("Jeu créé, mais la génération automatique de l’image de couverture a échoué.");
         }
       }
 
@@ -239,7 +237,7 @@ export default function EducatorAddGame() {
   };
 
   const labelClass = 'block text-sm font-semibold text-gray-700 mb-2';
-  const inputClass = 'w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all';
+  const inputClass = 'w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all';
 
   const handleGenerateCoverPreview = async () => {
     const mappedType = FORM_TYPE_TO_TYPE_JEU_LITERAL[formData.type as keyof typeof FORM_TYPE_TO_TYPE_JEU_LITERAL];
@@ -255,14 +253,14 @@ export default function EducatorAddGame() {
         typeJeu: mappedType,
         ageMin: typeof formData.ageMin === 'number' ? formData.ageMin : undefined,
         ageMax: typeof formData.ageMax === 'number' ? formData.ageMax : undefined,
-        difficulte: DIFFICULTY_TO_NUMBER[formData.difficulty] ?? 5,
+        difficulte: DIFFICULTY_TO_WEIGHT[formData.difficulty] ?? 5,
       });
       setFormData((prev) => ({ ...prev, coverImageUrl: res.data?.coverImageUrl ?? '' }));
-      toast.success('Preview cover généré');
+      toast.success('Aperçu de l’image de couverture généré');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         || (err as Error)?.message
-        || 'Erreur génération cover';
+        || 'Erreur lors de la génération de l’image de couverture';
       toast.error(message);
     } finally {
       setGeneratingCover(false);
@@ -293,14 +291,14 @@ export default function EducatorAddGame() {
             <button
               type="button"
               onClick={() => navigate('/educator/games/manage')}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-semibold shadow-sm hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 transition-all"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-semibold shadow-sm hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1 transition-all"
             >
               <ArrowLeft className="w-4 h-4 shrink-0" />
               Retour à la liste des jeux
             </button>
           </div>
 
-          <div className="h-28 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center p-6 mb-8 shadow-lg">
+          <div className="h-28 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-500 flex items-center p-6 mb-8 shadow-lg">
             <div>
               <h1 className="text-2xl font-bold text-white drop-shadow-sm">Ajouter un jeu</h1>
               <p className="text-white/90 text-sm mt-1">Le jeu sera soumis à validation par l'administrateur avant d'être publié.</p>
@@ -373,9 +371,9 @@ export default function EducatorAddGame() {
                   >
                       <option value="">— Choisir —</option>
                       <option value="quiz">Quiz</option>
-                      <option value="memory">Memory</option>
-                      <option value="logic">Logic</option>
-                      <option value="reflex">Reflex</option>
+                      <option value="memory">Mémoire</option>
+                      <option value="logic">Logique</option>
+                      <option value="reflex">Réflexe</option>
                   </SelectField>
                   <SelectField
                     label="Mode de jeu"
@@ -387,19 +385,8 @@ export default function EducatorAddGame() {
                   >
                       <option value="">— Choisir —</option>
                       <option value="INDIVIDUEL">Individuel</option>
-                      <option value="EN_LIGNE">En ligne · chacun pour soi</option>
+                      <option value="EN_LIGNE">Multijoueur · chacun pour soi</option>
                   </SelectField>
-                  {formData.type === 'quiz' && (
-                    <SelectField
-                      label="Mode de partie"
-                      value={formData.quizPlayMode}
-                      onChange={(e) => setFormData({ ...formData, quizPlayMode: e.target.value as QuizPlayMode })}
-                      inputClassName={inputClass}
-                    >
-                      <option value="CLASSIC">Classique</option>
-                      <option value="BLITZ_60S">Blitz 60 secondes</option>
-                    </SelectField>
-                  )}
                   <SelectField
                     label="Difficulté"
                     required
@@ -416,8 +403,9 @@ export default function EducatorAddGame() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                   <div>
-                    <label className={labelClass}>Âge min * (7–18)</label>
+                    <label htmlFor="edu-game-ageMin" className={labelClass}>Âge min * (7–18)</label>
                     <input
+                      id="edu-game-ageMin"
                       type="number"
                       value={formData.ageMin === '' ? '' : formData.ageMin}
                       onChange={(e) => { const v = e.target.value; setFormData({ ...formData, ageMin: v === '' ? '' : (parseInt(v, 10) || 7) }); setErrors((p) => ({ ...p, ageMin: '', ageMax: '' })); }}
@@ -427,8 +415,9 @@ export default function EducatorAddGame() {
                     {errors.ageMin && <p className="mt-1 text-sm text-red-600">{errors.ageMin}</p>}
                   </div>
                   <div>
-                    <label className={labelClass}>Âge max * (7–18)</label>
+                    <label htmlFor="edu-game-ageMax" className={labelClass}>Âge max * (7–18)</label>
                     <input
+                      id="edu-game-ageMax"
                       type="number"
                       value={formData.ageMax === '' ? '' : formData.ageMax}
                       onChange={(e) => { const v = e.target.value; setFormData({ ...formData, ageMax: v === '' ? '' : (parseInt(v, 10) || 18) }); setErrors((p) => ({ ...p, ageMax: '' })); }}
@@ -438,8 +427,9 @@ export default function EducatorAddGame() {
                     {errors.ageMax && <p className="mt-1 text-sm text-red-600">{errors.ageMax}</p>}
                   </div>
                   <div>
-                    <label className={labelClass}>Durée (minutes) *</label>
+                    <label htmlFor="edu-game-estimatedTime" className={labelClass}>Durée (minutes) *</label>
                     <input
+                      id="edu-game-estimatedTime"
                       type="number"
                       value={formData.estimatedTime}
                       onChange={(e) => { setFormData({ ...formData, estimatedTime: e.target.value }); setErrors((p) => ({ ...p, estimatedTime: '' })); }}
@@ -470,28 +460,7 @@ export default function EducatorAddGame() {
 
               <section className="mb-8">
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">
-                  Icône *
-                </h2>
-                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                  {ICONS.map((icon) => (
-                    <button
-                      key={icon}
-                      type="button"
-                      onClick={() => { setFormData({ ...formData, icon }); setErrors((p) => ({ ...p, icon: '' })); }}
-                      className={`w-12 h-12 flex items-center justify-center text-2xl rounded-xl border-2 transition-all ${
-                        formData.icon === icon ? 'border-emerald-500 bg-emerald-50 scale-105' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-                {errors.icon && <p className="mt-2 text-sm text-red-600">{errors.icon}</p>}
-              </section>
-
-              <section className="mb-8">
-                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">
-                  Cover image
+                  Image de couverture
                 </h2>
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
@@ -504,9 +473,9 @@ export default function EducatorAddGame() {
                       {generatingCover ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                       Générer IA
                     </button>
-                    <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold cursor-pointer hover:bg-emerald-100">
+                    <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 font-semibold cursor-pointer hover:bg-sky-100">
                       <Upload className="w-4 h-4" />
-                      Upload manuel
+                      Import manuel
                       <input
                         type="file"
                         accept="image/*"
@@ -520,12 +489,12 @@ export default function EducatorAddGame() {
                     value={formData.coverImageUrl}
                     onChange={(e) => setFormData({ ...formData, coverImageUrl: e.target.value })}
                     className={inputClass}
-                    placeholder="URL ou data URL après génération / upload"
+                    placeholder="URL ou data URL après génération / import"
                   />
                   {formData.coverImageUrl && (
                     <img
                       src={previewCoverSrc || formData.coverImageUrl}
-                      alt="Aperçu cover"
+                      alt="Aperçu de la couverture"
                       className="w-full max-w-md h-44 object-cover rounded-xl border border-gray-200"
                       onError={() => setPreviewCoverSrc(formData.coverImageUrl)}
                     />
@@ -539,7 +508,7 @@ export default function EducatorAddGame() {
                     />
                     <Sparkles className="w-4 h-4 text-violet-600" />
                     <span className="text-sm font-semibold text-violet-900">
-                      Générer automatiquement une cover IA après création
+                      Générer automatiquement une image de couverture IA après création
                     </span>
                   </label>
                 </div>
@@ -549,12 +518,12 @@ export default function EducatorAddGame() {
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">
                   Visibilité
                 </h2>
-                <label className="flex items-center gap-4 p-4 rounded-xl border-2 border-gray-100 hover:border-emerald-100 cursor-pointer transition-all bg-gray-50/30">
+                <label className="flex items-center gap-4 p-4 rounded-xl border-2 border-gray-100 hover:border-sky-100 cursor-pointer transition-all bg-gray-50/30">
                   <input
                     type="checkbox"
                     checked={formData.actif}
                     onChange={(e) => setFormData({ ...formData, actif: e.target.checked })}
-                    className="w-5 h-5 rounded-md border-gray-300 text-emerald-500 focus:ring-emerald-500 focus:ring-2"
+                    className="w-5 h-5 rounded-md border-gray-300 text-sky-500 focus:ring-sky-500 focus:ring-2"
                   />
                   <div>
                     <span className="font-semibold text-gray-900">Jeu actif</span>
@@ -569,7 +538,7 @@ export default function EducatorAddGame() {
                   whileTap={{ scale: submitting ? 1 : 0.98 }}
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-70 disabled:pointer-events-none"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-70 disabled:pointer-events-none"
                 >
                   {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   {submitting ? 'Création...' : 'Soumettre le jeu'}

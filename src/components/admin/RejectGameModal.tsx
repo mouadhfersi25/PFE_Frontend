@@ -6,6 +6,12 @@ type RejectGameModalProps = {
   open: boolean;
   gameTitle?: string;
   submitting?: boolean;
+  /** Titre de la popup (par défaut : refus d'une demande de jeu). */
+  title?: string;
+  /** Placeholder du motif (par défaut : contexte "demande de jeu"). */
+  placeholder?: string;
+  /** Libellé du bouton de confirmation (par défaut : "Confirmer le refus"). */
+  confirmLabel?: string;
   onClose: () => void;
   onConfirm: (reason: string) => Promise<void> | void;
 };
@@ -14,6 +20,9 @@ export default function RejectGameModal({
   open,
   gameTitle,
   submitting = false,
+  title = 'Refuser la demande de jeu',
+  placeholder = "Ex: Les consignes ne sont pas claires, merci d'ajouter une explication pour chaque question...",
+  confirmLabel = 'Confirmer le refus',
   onClose,
   onConfirm,
 }: RejectGameModalProps) {
@@ -61,7 +70,7 @@ export default function RejectGameModal({
       />
       <div className="relative w-full max-w-xl max-h-[90vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h3 className="text-lg font-bold text-slate-900">Refuser la demande de jeu</h3>
+          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -86,7 +95,7 @@ export default function RejectGameModal({
               setReason(e.target.value);
               if (error) setError(null);
             }}
-            placeholder="Ex: Les consignes ne sont pas claires, merci d'ajouter une explication pour chaque question..."
+            placeholder={placeholder}
             rows={5}
             disabled={submitting}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-rose-400 focus:ring-2 focus:ring-rose-100 disabled:bg-slate-50"
@@ -113,7 +122,7 @@ export default function RejectGameModal({
             className="inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Confirmer le refus
+            {confirmLabel}
           </button>
         </div>
       </div>

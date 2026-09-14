@@ -84,7 +84,7 @@ export default function Ranking() {
               </div>
               <div>
                 <h1 className="text-xl font-bold">Classement des joueurs</h1>
-                <p className="text-sm text-slate-300">Tous les scores personnels, solo et en ligne</p>
+                <p className="text-sm text-slate-300">Tous les scores personnels, solo et multijoueur</p>
               </div>
             </div>
           </div>

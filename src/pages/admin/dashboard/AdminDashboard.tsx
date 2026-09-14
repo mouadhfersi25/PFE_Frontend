@@ -10,7 +10,7 @@ import { Check, X, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import RejectGameModal from '@/components/admin/RejectGameModal';
 
-const DAYS_FALLBACK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAYS_FALLBACK = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -208,7 +208,7 @@ export default function AdminDashboard() {
 
   const stats = [
     {
-      label: 'Total Users',
+      label: 'Utilisateurs totaux',
       value: totalPlayers,
       icon: <Users className="w-6 h-6" />,
       color: 'from-blue-500 to-cyan-500',
@@ -217,7 +217,7 @@ export default function AdminDashboard() {
       route: '/admin/players',
     },
     {
-      label: 'Total Games',
+      label: 'Jeux totaux',
       value: totalGames,
       icon: <Gamepad2 className="w-6 h-6" />,
       color: 'from-purple-500 to-pink-500',
@@ -226,11 +226,11 @@ export default function AdminDashboard() {
       route: '/admin/games',
     },
     {
-      label: 'Active Sessions',
+      label: 'Sessions actives',
       value: activeSessions,
       icon: <Play className="w-6 h-6" />,
       color: 'from-green-500 to-teal-500',
-      change: 'Live',
+      change: 'En direct',
       loading: false,
       route: '/admin/dashboard',
 
@@ -268,7 +268,7 @@ export default function AdminDashboard() {
             <TrendingUp className="w-4 h-4" />
             Vue globale
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">Dashboard Admin</h1>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-2">Tableau de bord admin</h1>
           <p className="text-slate-600 text-sm md:text-base">
             Bienvenue {displayName}. Suivez les utilisateurs, les jeux et les validations en temps réel.
           </p>
@@ -378,7 +378,7 @@ export default function AdminDashboard() {
                 >
                   <div className="flex items-center gap-3 overflow-hidden flex-1">
                     <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center shrink-0 text-xl group-hover:scale-110 transition-transform">
-                      {game.icone || '🎮'}
+                      🎮
                     </div>
                     <div className="min-w-0 flex-1">
                       <h4 className="text-sm font-bold text-slate-900 truncate group-hover:text-orange-600 transition-colors">{game.titre}</h4>

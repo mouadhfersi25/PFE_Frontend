@@ -6,6 +6,9 @@ import type {
   UpdateBadgeRequest,
   EtatJeu,
   ChangeGameStatusRequest,
+  CreateGameRequest,
+  UpdateGameRequest,
+  GameDTO,
   QuizQuestionDTO,
   MemoryCardDTO,
   LogicPuzzleDTO,
@@ -23,6 +26,16 @@ import type {
 
 const adminApi = {
   getUsers: () => api.get(ADMIN_ENDPOINTS.USERS),
+  createStaffUser: (data: {
+    nom: string;
+    prenom: string;
+    email: string;
+    password: string;
+    dateDeNaissance: string;
+    role: 'EDUCATEUR' | 'SPONSOR';
+    telephone: string;
+    genre: 'HOMME' | 'FEMME';
+  }) => api.post<UserDTO>(ADMIN_ENDPOINTS.USERS, data),
   getUserById: (id: number | string) =>
     api.get(ADMIN_ENDPOINTS.USER_BY_ID(id), { params: { _t: Date.now() } }),
   suspendUser: (id: number | string) => api.post(ADMIN_ENDPOINTS.SUSPEND_USER(id)),
@@ -41,12 +54,12 @@ const adminApi = {
     api.get<AdminRecentActivityDTO[]>(ADMIN_ENDPOINTS.STATISTICS_RECENT_ACTIVITY, { params: { limit } }),
   getStatisticsOverview: () =>
     api.get<AdminStatisticsOverviewDTO>(ADMIN_ENDPOINTS.STATISTICS_OVERVIEW),
-  getGames: () => api.get(ADMIN_ENDPOINTS.GAMES),
-  getGameById: (id: number | string) => api.get(ADMIN_ENDPOINTS.GAME_BY_ID(id)),
+  getGames: () => api.get<GameDTO[]>(ADMIN_ENDPOINTS.GAMES),
+  getGameById: (id: number | string) => api.get<GameDTO>(ADMIN_ENDPOINTS.GAME_BY_ID(id)),
   getGameAiReview: (id: number | string) => api.get<GameAiReviewDTO>(ADMIN_ENDPOINTS.GAME_AI_REVIEW(id)),
-  createGame: (data: Record<string, unknown>) => api.post(ADMIN_ENDPOINTS.GAMES, data),
-  updateGame: (id: number | string, data: Record<string, unknown>) =>
-    api.put(ADMIN_ENDPOINTS.GAME_BY_ID(id), data),
+  createGame: (data: CreateGameRequest) => api.post<GameDTO>(ADMIN_ENDPOINTS.GAMES, data),
+  updateGame: (id: number | string, data: UpdateGameRequest) =>
+    api.put<GameDTO>(ADMIN_ENDPOINTS.GAME_BY_ID(id), data),
   updateGameStatus: (id: number | string, etat: EtatJeu, motifRefus?: string) => {
     const payload: ChangeGameStatusRequest = {
       etat,
@@ -73,6 +86,14 @@ const adminApi = {
     api.get<{ count: number }>(ADMIN_ENDPOINTS.RECLAMATIONS_PENDING_COUNT),
   updateReclamation: (id: number | string, data: UpdateReclamationRequest) =>
     api.patch<ReclamationDTO>(ADMIN_ENDPOINTS.RECLAMATION_BY_ID(id), data),
+  deactivateGame: (id: number | string, motif: string) =>
+    api.patch(ADMIN_ENDPOINTS.GAME_DEACTIVATE(id), { motif }),
+  activateGame: (id: number | string) =>
+    api.patch(ADMIN_ENDPOINTS.GAME_ACTIVATE(id)),
+  acceptReactivation: (id: number | string) =>
+    api.patch(ADMIN_ENDPOINTS.GAME_REACTIVATION_ACCEPT(id)),
+  rejectReactivation: (id: number | string, motif: string) =>
+    api.patch(ADMIN_ENDPOINTS.GAME_REACTIVATION_REJECT(id), { motif }),
 };
 
 export default adminApi;

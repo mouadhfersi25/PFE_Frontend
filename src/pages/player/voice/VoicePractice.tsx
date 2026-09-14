@@ -7,6 +7,7 @@ import playerVoiceApi from '@/api/player/playerVoice.api';
 import type { VoiceEvaluationResultDTO, VoicePromptDTO, VoiceSeriesDTO } from '@/api/types/voice.types';
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder';
 import { VoiceFeedbackBoard } from '@/components/voice/VoiceFeedbackBoard';
+import VoiceModelPlayer from '@/components/voice/VoiceModelPlayer';
 import PlayerHeaderActions from '@/components/player/PlayerHeaderActions';
 import { getVoiceSubtypeLabel } from '@/constants/voiceExerciseTypes';
 
@@ -23,6 +24,8 @@ export default function VoicePractice() {
 
   const prompts = useMemo(() => series?.prompts ?? [], [series]);
   const currentPrompt: VoicePromptDTO | undefined = prompts[currentIndex];
+  const isRepeatAfter = (currentPrompt?.sousType || '').toUpperCase() === 'REPEAT_AFTER';
+  const speechLang = series?.langue === 'en' ? 'en-US' : 'fr-FR';
 
   useEffect(() => {
     if (!seriesId) return;
@@ -135,22 +138,28 @@ export default function VoicePractice() {
 
       <main className="max-w-4xl mx-auto px-4 py-8 space-y-6">
         <motion.div
+          key={currentPrompt.id}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-2xl border border-white/15 bg-white/5 p-6"
         >
-          <p className="text-xs uppercase tracking-wide text-cyan-300 mb-2">Lis ce texte à voix haute</p>
+          <p className="text-xs uppercase tracking-wide text-cyan-300 mb-2">
+            {isRepeatAfter ? 'Écoute le modèle, puis répète' : 'Lis ce texte à voix haute'}
+          </p>
           <p className="text-2xl md:text-3xl font-semibold leading-relaxed text-white">
             {currentPrompt.texteReference}
           </p>
           {currentPrompt.indice && (
             <p className="text-sm text-slate-300 mt-4">Indice : {currentPrompt.indice}</p>
           )}
+          {isRepeatAfter && (
+            <VoiceModelPlayer text={currentPrompt.texteReference} lang={speechLang} />
+          )}
         </motion.div>
 
         <VoiceRecorder
           maxDurationSeconds={currentPrompt.dureeMaxSecondes ?? 30}
-          lang={series.langue === 'en' ? 'en-US' : 'fr-FR'}
+          lang={speechLang}
           disabled={submitting}
           onRecordingReady={(payload) => void handleEvaluate(payload)}
         />

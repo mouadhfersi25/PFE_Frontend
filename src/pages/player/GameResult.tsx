@@ -74,26 +74,41 @@ export default function GameResult() {
     if (!normalizedRoomCode || !Number.isFinite(gameId) || gameId <= 0) return;
 
     let cancelled = false;
-    userApi.getRoomResult(normalizedRoomCode, gameId)
-      .then((response) => {
-        if (!cancelled) setRoomResult(response.data);
-      })
-      .catch(() => {
-        // Le premier résultat peut ne pas encore exister; le WebSocket prendra le relais.
-      });
+    let resultComplete = false;
+    const fetchResult = () => {
+      if (cancelled || resultComplete) return;
+      userApi.getRoomResult(normalizedRoomCode, gameId)
+        .then((response) => {
+          if (cancelled) return;
+          setRoomResult(response.data);
+          resultComplete = Boolean(response.data?.complete);
+        })
+        .catch(() => {
+          // Le premier résultat peut ne pas encore exister; le WebSocket prendra le relais.
+        });
+    };
+    fetchResult();
 
     const unsubscribe = subscribeCompetitiveResult(
       normalizedRoomCode,
       (result) => {
-        if (!cancelled && Number(result.gameId) === gameId) {
-          setRoomResult(result);
-        }
+        if (cancelled || Number(result.gameId) !== gameId) return;
+        setRoomResult(result);
+        resultComplete = Boolean(result.complete);
       }
     );
+
+    // Filet de sécurité : si un adversaire abandonne sans jamais soumettre de score, aucun
+    // message WebSocket ne sera renvoyé tant que personne n'agit. Ce polling périodique
+    // permet de découvrir le verdict final (abandon détecté côté serveur après un délai)
+    // même sans nouvel événement poussé par le serveur. Il s'arrête dès que le résultat
+    // est complet.
+    const interval = setInterval(fetchResult, 6000);
 
     return () => {
       cancelled = true;
       unsubscribe();
+      clearInterval(interval);
     };
   }, [mode, roomCode, game?.id, sessionData?.gameId]);
 
@@ -102,7 +117,7 @@ export default function GameResult() {
     const parsedGameId = Number(game.id ?? sessionData.gameId);
     if (!Number.isFinite(parsedGameId) || parsedGameId <= 0) {
       console.error('Game session save skipped: invalid game id', { game, sessionData });
-      toast.error("Impossible d'enregistrer la session: gameId invalide");
+      toast.error("Impossible d'enregistrer la session : identifiant de jeu invalide");
       return;
     }
 
@@ -249,7 +264,7 @@ export default function GameResult() {
   if (!game || !sessionData) return null;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden relative">
       <div className="pointer-events-none absolute -top-20 -left-20 w-72 h-72 rounded-full bg-fuchsia-600/30 blur-3xl" />
       <div className="pointer-events-none absolute top-20 -right-20 w-72 h-72 rounded-full bg-cyan-500/30 blur-3xl" />
       <div className="fixed top-4 right-4 z-40">
@@ -275,68 +290,69 @@ export default function GameResult() {
             >
               <Star className="w-24 h-24 text-white mx-auto mb-4" />
             </motion.div>
-            <h2 className="text-5xl font-bold text-white mb-2">Level Up!</h2>
+            <h2 className="text-5xl font-bold text-white mb-2">Niveau supérieur !</h2>
             <p className="text-2xl text-white">
-              You're now Level {playerProfile?.level}
+              Tu es maintenant niveau {playerProfile?.level}
             </p>
           </motion.div>
         </motion.div>
       )}
 
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/5 rounded-3xl border border-white/15 backdrop-blur-xl p-8 max-w-3xl w-full"
+        className="bg-white/5 rounded-3xl border border-white/15 backdrop-blur-xl p-4 sm:p-6 max-w-3xl w-full mx-auto"
       >
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-3">
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: 'spring', delay: 0.2 }}
-            className={`w-24 h-24 mx-auto mb-4 rounded-full flex items-center justify-center ${
+            className={`w-14 h-14 mx-auto mb-2 rounded-full flex items-center justify-center ${
               sessionData.reussite
                 ? 'bg-gradient-to-br from-green-400 to-emerald-500'
                 : 'bg-gradient-to-br from-orange-400 to-red-500'
             }`}
           >
             {sessionData.reussite ? (
-              <Trophy className="w-12 h-12 text-white" />
+              <Trophy className="w-7 h-7 text-white" />
             ) : (
-              <Target className="w-12 h-12 text-white" />
+              <Target className="w-7 h-7 text-white" />
             )}
           </motion.div>
           <motion.h1
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="text-4xl font-bold text-white mb-2"
+            className="text-2xl font-bold text-white mb-1"
           >
-            {sessionData.reussite ? '🎉 Great Job!' : '💪 Good Effort!'}
+            {sessionData.reussite ? '🎉 Bravo !' : '💪 Bon effort !'}
           </motion.h1>
-          <p className="text-slate-300">{game.title}</p>
+          <p className="text-slate-300 text-sm">{game.title}</p>
           {mode === 'Online' && (
-            <span className="inline-block mt-2 px-3 py-1 bg-purple-500/30 text-purple-100 rounded-full text-sm font-medium border border-purple-300/30">
-              Solo en ligne · contre adversaires
+            <span className="inline-block mt-1.5 px-3 py-1 bg-purple-500/30 text-purple-100 rounded-full text-xs font-medium border border-purple-300/30">
+              Multijoueur · contre adversaires
             </span>
           )}
         </div>
 
         {/* Score Breakdown */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4 }}
-            className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl p-6 text-white"
+            className="bg-gradient-to-br from-purple-500 to-blue-500 rounded-2xl p-3 sm:p-4 text-white"
           >
-            <Trophy className="w-8 h-8 mb-2" />
-            <p className="text-sm opacity-90 mb-1">
+            <Trophy className="w-6 h-6 mb-1" />
+            <p className="text-xs sm:text-sm opacity-90 mb-0.5">
               Score personnel
             </p>
-            <p className="text-4xl font-bold tabular-nums">
+            <p className="text-2xl sm:text-3xl font-bold tabular-nums">
               {officialScore}
-              <span className="text-2xl font-semibold opacity-85">/{maxScore}</span>
+              <span className="text-lg sm:text-xl font-semibold opacity-85">/{maxScore}</span>
             </p>
           </motion.div>
 
@@ -344,16 +360,16 @@ export default function GameResult() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-6 text-white"
+            className="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-3 sm:p-4 text-white"
           >
-            <Star className="w-8 h-8 mb-2" />
-            <p className="text-sm opacity-90 mb-1">XP Gained</p>
-            <p className="text-4xl font-bold">+{xpGained}</p>
+            <Star className="w-6 h-6 mb-1" />
+            <p className="text-xs sm:text-sm opacity-90 mb-0.5">XP gagnés</p>
+            <p className="text-2xl sm:text-3xl font-bold">+{xpGained}</p>
           </motion.div>
         </div>
         {scoringVersion && (
-          <div className="text-xs text-slate-400 mb-6 text-center">
-            Scoring rules: {scoringVersion}
+          <div className="text-xs text-slate-400 mb-2 text-center">
+            Scoring : {scoringVersion}
           </div>
         )}
 
@@ -393,7 +409,7 @@ export default function GameResult() {
               )}
             </motion.div>
             <p className="relative text-sm font-bold uppercase tracking-[0.3em] text-white/70">
-              Résultat de la room
+              Résultat de la salle
             </p>
             <h2 className="relative mt-2 text-4xl font-black tracking-tight text-white sm:text-5xl">
               {currentRoomPlayer.outcome === 'WINNER'
@@ -404,7 +420,7 @@ export default function GameResult() {
             </h2>
             <p className="relative mx-auto mt-4 max-w-xl text-base text-slate-100 sm:text-lg">
               {currentRoomPlayer.outcome === 'WINNER'
-                ? `Bravo ! Vous remportez la room avec ${currentRoomPlayer.score ?? 0} points.`
+                ? `Bravo ! Vous remportez la salle avec ${currentRoomPlayer.score ?? 0} points.`
                 : currentRoomPlayer.outcome === 'DRAW'
                   ? `Vous partagez la première place avec ${currentRoomPlayer.score ?? 0} points.`
                   : `Première place : ${roomLeaders || 'un adversaire'} avec ${roomResult.highestScore ?? 0} points. Votre score : ${currentRoomPlayer.score ?? 0} points.`}
@@ -420,7 +436,7 @@ export default function GameResult() {
             className="bg-indigo-500/10 rounded-2xl p-6 mb-8 border border-indigo-300/25"
           >
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <h3 className="font-bold text-white">Classement de la room</h3>
+              <h3 className="font-bold text-white">Classement de la salle</h3>
               <span className={`text-xs font-semibold rounded-full px-3 py-1 ${
                 roomResult.complete
                   ? 'bg-emerald-500/20 text-emerald-200'
@@ -455,9 +471,11 @@ export default function GameResult() {
                         ? '👑'
                         : player.outcome === 'DRAW'
                           ? '🏅'
-                          : player.submitted
-                            ? `${index + 1}e`
-                            : '…'}
+                          : player.outcome === 'ABANDONED'
+                            ? '🚪'
+                            : player.submitted
+                              ? `${index + 1}e`
+                              : '…'}
                     </span>
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-white">
@@ -466,17 +484,19 @@ export default function GameResult() {
                       </p>
                       <p className="text-xs text-slate-400">
                         {player.outcome === 'WINNER'
-                          ? 'Vainqueur de la room'
+                          ? 'Vainqueur de la salle'
                           : player.outcome === 'DRAW'
                             ? 'Première place partagée'
                             : player.outcome === 'LOSER'
                               ? 'Adversaire'
-                              : 'Partie en cours'}
+                              : player.outcome === 'ABANDONED'
+                                ? 'N’a pas terminé'
+                                : 'Partie en cours'}
                       </p>
                     </div>
                   </div>
                   <p className={player.submitted ? 'shrink-0 text-lg font-black text-cyan-200' : 'shrink-0 text-amber-200'}>
-                    {player.submitted ? `${player.score ?? 0} pts` : 'En cours…'}
+                    {player.submitted ? `${player.score ?? 0} pts` : player.outcome === 'ABANDONED' ? 'Abandon' : 'En cours…'}
                   </p>
                 </div>
               ))}
@@ -494,33 +514,33 @@ export default function GameResult() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
-          className="bg-white/5 rounded-2xl p-6 mb-8 border border-white/10"
+          className="bg-white/5 rounded-2xl p-3 sm:p-4 mb-3 border border-white/10"
         >
-          <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Performance Details
+          <h3 className="font-bold text-white mb-2 flex items-center gap-2 text-sm sm:text-base">
+            <TrendingUp className="w-4 h-4" />
+            Détails de performance
           </h3>
-          <div className="space-y-3">
+          <div className="space-y-1.5 text-sm">
             {sessionData.accuracy !== undefined && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">Accuracy</span>
+                <span className="text-slate-300">Précision</span>
                 <span className="font-bold text-white">{sessionData.accuracy}%</span>
               </div>
             )}
             {displayDuration && displayDuration !== '—' && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-300 flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  Duration
+                <span className="text-slate-300 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" />
+                  Durée
                 </span>
                 <span className="font-bold text-white">{displayDuration}</span>
               </div>
             )}
             {sessionData.reactionTime && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-300 flex items-center gap-2">
-                  <Zap className="w-4 h-4" />
-                  Avg Reaction Time
+                <span className="text-slate-300 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5" />
+                  Temps de réaction moyen
                 </span>
                 <span className="font-bold text-white">{sessionData.reactionTime}ms</span>
               </div>
@@ -535,33 +555,33 @@ export default function GameResult() {
             )}
             {sessionData.moves && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">Moves</span>
+                <span className="text-slate-300">Coups</span>
                 <span className="font-bold text-white">{sessionData.moves}</span>
               </div>
             )}
             {sessionData.attempts && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">Attempts</span>
+                <span className="text-slate-300">Tentatives</span>
                 <span className="font-bold text-white">{sessionData.attempts}</span>
               </div>
             )}
             {sessionData.hintsUsed !== undefined && (
               <div className="flex items-center justify-between">
-                <span className="text-slate-300">Hints Used</span>
+                <span className="text-slate-300">Indices utilisés</span>
                 <span className="font-bold text-white">{sessionData.hintsUsed}</span>
               </div>
             )}
           </div>
         </motion.div>
 
-        <div className="mt-4">
+        <div className="mt-2">
           <button
             type="button"
             disabled={!savedSessionId || reportSent}
             onClick={() => setReportModalOpen(true)}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 font-semibold hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 px-6 py-2 rounded-xl border border-amber-400/40 bg-amber-500/10 text-amber-100 font-semibold text-sm hover:bg-amber-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Flag className="w-5 h-5" />
+            <Flag className="w-4 h-4" />
             {reportSent ? 'Signalement envoyé' : 'Signaler un problème'}
           </button>
         </div>
@@ -590,8 +610,25 @@ export default function GameResult() {
           }}
         />
 
-        {/* Action Buttons */}
-        <div className="flex gap-4 mt-4">
+        {/* Motivational Message */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="mt-3 text-center text-slate-300 text-sm"
+        >
+          <p>
+            {sessionData.reussite
+              ? "🌟 Excellent travail ! Tu progresses chaque jour !"
+              : "💪 Continue à t'entraîner ! Chaque tentative te rend plus fort !"}
+          </p>
+        </motion.div>
+      </motion.div>
+      </div>
+
+      {/* Action Buttons — toujours visibles, sans avoir à défiler */}
+      <div className="shrink-0 border-t border-white/10 bg-slate-950/90 backdrop-blur-xl p-3">
+        <div className="max-w-3xl mx-auto flex gap-4">
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
@@ -602,35 +639,22 @@ export default function GameResult() {
               }
               navigate(`/player/game/${game.type}/${game.id}`, { state: { game, mode } });
             }}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-white/10 text-slate-100 rounded-xl font-semibold hover:bg-white/20 transition-colors border border-white/20"
+            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-white/10 text-slate-100 rounded-xl font-semibold hover:bg-white/20 transition-colors border border-white/20"
           >
             <RotateCcw className="w-5 h-5" />
-            {mode === 'Online' ? 'Nouvelle partie en ligne' : 'Rejouer'}
+            {mode === 'Online' ? 'Nouvelle partie multijoueur' : 'Rejouer'}
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => navigate('/player/dashboard')}
-            className="flex-1 flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition-shadow"
+            className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg transition-shadow"
           >
             <Home className="w-5 h-5" />
-            Dashboard
+            Tableau de bord
           </motion.button>
         </div>
-        {/* Motivational Message */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="mt-6 text-center text-slate-300"
-        >
-          <p>
-            {sessionData.reussite
-              ? "🌟 Excellent work! You're improving every day!"
-              : "💪 Keep practicing! Every attempt makes you stronger!"}
-          </p>
-        </motion.div>
-      </motion.div>
+      </div>
     </div>
   );
 }

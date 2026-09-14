@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { authService } from "../../../services/auth.service";
 
@@ -20,7 +21,7 @@ const Verify = () => {
 
       if (!token) {
         setStatus("error");
-        setMessage("Token de vérification manquant");
+        setMessage("Jeton de vérification manquant");
         return;
       }
 
@@ -30,7 +31,7 @@ const Verify = () => {
         
         if (!decodedToken) {
           setStatus("error");
-          setMessage("Token de vérification manquant");
+          setMessage("Jeton de vérification manquant");
           return;
         }
         
@@ -42,30 +43,36 @@ const Verify = () => {
         setTimeout(() => {
           navigate("/login");
         }, 3000);
-      } catch (error) {
+      } catch (error: unknown) {
         setStatus("error");
         let errorMessage = "Erreur lors de la vérification";
-        
-        if (error.response) {
-          const status = error.response.status;
-          const data = error.response.data;
-          
+
+        const err = error as {
+          response?: { status?: number; data?: { error?: string; message?: string } };
+          request?: unknown;
+          message?: string;
+        };
+
+        if (err.response) {
+          const status = err.response.status;
+          const data = err.response.data;
+
           // Le backend retourne { "error": "message" } pour les erreurs
           if (status === 400) {
-            errorMessage = data.error || data.message || "Token invalide ou expiré";
+            errorMessage = data?.error || data?.message || "Jeton invalide ou expiré";
           } else if (status === 404) {
-            errorMessage = data.error || data.message || "Token de vérification introuvable";
+            errorMessage = data?.error || data?.message || "Jeton de vérification introuvable";
           } else {
-            errorMessage = data.error || data.message || `Erreur ${status}`;
+            errorMessage = data?.error || data?.message || `Erreur ${status}`;
           }
-          
-          console.error("Erreur de vérification:", error.response.data); // Debug
-        } else if (error.request) {
+
+          console.error("Erreur de vérification:", err.response.data); // Debug
+        } else if (err.request) {
           errorMessage = "Impossible de contacter le serveur. Vérifiez votre connexion.";
         } else {
-          errorMessage = error.message || errorMessage;
+          errorMessage = err.message || errorMessage;
         }
-        
+
         setMessage(errorMessage);
       }
     };
@@ -73,7 +80,7 @@ const Verify = () => {
     verifyEmail();
   }, [searchParams, navigate]);
 
-  const styles = {
+  const styles: Record<string, CSSProperties> = {
     container: {
       minHeight: "100vh",
       display: "flex",
@@ -179,12 +186,12 @@ const Verify = () => {
                 style={styles.button}
                 onClick={() => navigate("/login")}
                 onMouseEnter={(e) => {
-                  e.target.style.transform = "translateY(-2px)";
-                  e.target.style.boxShadow = "0 6px 20px rgba(99, 102, 241, 0.5)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                  e.currentTarget.style.boxShadow = "0 6px 20px rgba(99, 102, 241, 0.5)";
                 }}
                 onMouseLeave={(e) => {
-                  e.target.style.transform = "translateY(0)";
-                  e.target.style.boxShadow = "0 4px 15px rgba(99, 102, 241, 0.4)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = "0 4px 15px rgba(99, 102, 241, 0.4)";
                 }}
               >
                 Aller à la connexion 🚀
@@ -204,12 +211,12 @@ const Verify = () => {
                   style={styles.button}
                   onClick={() => navigate("/register")}
                   onMouseEnter={(e) => {
-                    e.target.style.transform = "translateY(-2px)";
-                    e.target.style.boxShadow = "0 6px 20px rgba(99, 102, 241, 0.5)";
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 6px 20px rgba(99, 102, 241, 0.5)";
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.transform = "translateY(0)";
-                    e.target.style.boxShadow = "0 4px 15px rgba(99, 102, 241, 0.4)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 15px rgba(99, 102, 241, 0.4)";
                   }}
                 >
                   S'inscrire à nouveau
@@ -221,12 +228,12 @@ const Verify = () => {
                   }}
                   onClick={() => navigate("/login")}
                   onMouseEnter={(e) => {
-                    e.target.style.transform = "translateY(-2px)";
-                    e.target.style.boxShadow = "0 6px 20px rgba(107, 114, 128, 0.5)";
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow = "0 6px 20px rgba(107, 114, 128, 0.5)";
                   }}
                   onMouseLeave={(e) => {
-                    e.target.style.transform = "translateY(0)";
-                    e.target.style.boxShadow = "0 4px 15px rgba(107, 114, 128, 0.4)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "0 4px 15px rgba(107, 114, 128, 0.4)";
                   }}
                 >
                   Aller à la connexion

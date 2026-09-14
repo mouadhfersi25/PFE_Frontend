@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Edit, Trash2, Loader2, Gamepad2, Eye, LayoutGrid, List } from 'lucide-react';
+import { Edit, Trash2, Loader2, Gamepad2, Eye, LayoutGrid, List, PowerOff, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import educatorApi from '@/api/educator/educator.api';
-import type { GameDTO } from '@/api/types';
+import type { GameDTO, Difficulte } from '@/api/types';
 import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
 import { filterGamesForManageList } from './manageGamesListFilter';
+import { gameTypeFr } from '@/utils/frLabels';
 
 const TYPE_ICONS: Record<string, string> = {
   QUIZ: '🧮',
@@ -23,18 +24,26 @@ const STATUS_LABELS: Record<string, { label: string; color: string; icon: string
   REFUSE: { label: 'Refusé', color: 'bg-rose-100 text-rose-700 border-rose-200', icon: '❌' },
 };
 
-function difficultyLabel(d: number | null): string {
-  if (d == null) return '—';
-  if (d <= 3) return 'Facile';
-  if (d <= 6) return 'Moyen';
-  return 'Difficile';
+/**
+ * Un jeu ACCEPTE mais désactivé par l'admin (suite à signalement) reste modifiable le temps
+ * que l'éducateur corrige le contenu, tant qu'une demande de réactivation n'est pas déjà en cours.
+ */
+function canCorrectDeactivatedGame(game: GameDTO): boolean {
+  return game.etat === 'ACCEPTE' && !game.actif && !game.reactivationPending;
 }
 
-function difficultyClass(d: number | null): string {
-  if (d == null) return 'bg-gray-100 text-gray-700';
-  if (d <= 3) return 'bg-green-100 text-green-700';
-  if (d <= 6) return 'bg-yellow-100 text-yellow-700';
-  return 'bg-red-100 text-red-700';
+function difficultyLabel(d: Difficulte | null): string {
+  if (d === 'FACILE') return 'Facile';
+  if (d === 'MOYEN') return 'Moyen';
+  if (d === 'DIFFICILE') return 'Difficile';
+  return '—';
+}
+
+function difficultyClass(d: Difficulte | null): string {
+  if (d === 'FACILE') return 'bg-green-100 text-green-700';
+  if (d === 'MOYEN') return 'bg-yellow-100 text-yellow-700';
+  if (d === 'DIFFICILE') return 'bg-red-100 text-red-700';
+  return 'bg-gray-100 text-gray-700';
 }
 
 export default function EducatorManageGames() {
@@ -45,6 +54,7 @@ export default function EducatorManageGames() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [cancellingReactivationId, setCancellingReactivationId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [hasQuestionContent, setHasQuestionContent] = useState<Record<number, boolean>>({});
 
@@ -166,6 +176,23 @@ export default function EducatorManageGames() {
     }
   };
 
+  const handleCancelReactivation = async (game: GameDTO, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCancellingReactivationId(game.id);
+    try {
+      const res = await educatorApi.cancelReactivationRequest(game.id);
+      setGames((prev) => prev.map((g) => (g.id === game.id ? res.data : g)));
+      toast.success('Demande de réactivation annulée : vous pouvez de nouveau corriger le jeu.');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err as Error)?.message
+        || "Erreur lors de l'annulation de la demande.";
+      toast.error(msg);
+    } finally {
+      setCancellingReactivationId(null);
+    }
+  };
+
   const getGameViewPath = (game: GameDTO): string => {
     return `/educator/games/manage/${game.id}/view`;
   };
@@ -182,10 +209,10 @@ export default function EducatorManageGames() {
             <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 mb-3 border border-slate-200">
-                  <Gamepad2 className="w-4 h-4 text-emerald-600" />
-                  Manage Games
+                  <Gamepad2 className="w-4 h-4 text-sky-600" />
+                  Gérer les jeux
                 </div>
-                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Mes Jeux</h1>
+                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Mes jeux</h1>
               </div>
               <div className="inline-flex items-center rounded-2xl border border-slate-200 bg-white/90 p-1 shadow-sm">
                 <button
@@ -216,7 +243,7 @@ export default function EducatorManageGames() {
 
           {loading && (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+              <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
             </div>
           )}
 
@@ -240,8 +267,8 @@ export default function EducatorManageGames() {
                     className="group relative bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-300"
                   >
                     <div className="p-5 flex items-start gap-4">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-b from-emerald-300 to-teal-600 flex items-center justify-center text-2xl shrink-0 shadow-sm">
-                        {game.icone ?? TYPE_ICONS[game.typeJeu] ?? '🎮'}
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-b from-sky-300 to-blue-600 flex items-center justify-center text-2xl shrink-0 shadow-sm">
+                        {TYPE_ICONS[game.typeJeu] ?? '🎮'}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -249,8 +276,14 @@ export default function EducatorManageGames() {
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${status.color}`}>
                             {status.icon} {status.label}
                           </span>
+                          {game.etat === 'ACCEPTE' && !game.actif && (
+                            <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-rose-100 text-rose-700 border-rose-200">
+                              {game.reactivationPending ? <RefreshCw className="w-3 h-3" /> : <PowerOff className="w-3 h-3" />}
+                              {game.reactivationPending ? 'Réactivation en attente' : 'Désactivé'}
+                            </span>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-500 mt-0.5 capitalize">{game.typeJeu?.toLowerCase()}</p>
+                        <p className="text-sm text-gray-500 mt-0.5">{gameTypeFr(game.typeJeu) || game.typeJeu}</p>
                       </div>
                     </div>
 
@@ -282,13 +315,13 @@ export default function EducatorManageGames() {
                         {game.etat === 'BROUILLON' || game.etat === 'REFUSE' ? (
                           <>
                             <div className="flex items-center gap-3">
-                              <span className="text-sm font-medium text-gray-700">Active</span>
+                              <span className="text-sm font-medium text-gray-700">Actif</span>
                               <motion.button
                                 type="button"
                                 whileTap={{ scale: 0.98 }}
                                 onClick={(e) => toggleGameActive(game, e)}
                                 disabled={togglingId === game.id}
-                                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-60 ${game.actif ? 'bg-green-500' : 'bg-slate-300'}`}
+                                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1 disabled:opacity-60 ${game.actif ? 'bg-sky-500' : 'bg-slate-300'}`}
                                 title={game.actif ? 'Désactiver' : 'Activer'}
                               >
                                 {togglingId === game.id ? (
@@ -356,12 +389,45 @@ export default function EducatorManageGames() {
                               </motion.button>
                             </div>
                           </>
-                        ) : (
+        ) : (
                           <div className="flex w-full flex-wrap items-center justify-between gap-3">
                             <p className="text-xs text-gray-500 italic">
-                              Jeu finalisé : modification désactivée. Vous pouvez encore supprimer le jeu.
+                              {canCorrectDeactivatedGame(game)
+                                ? 'Jeu désactivé suite à un signalement : corrigez-le puis demandez sa réactivation.'
+                                : game.reactivationPending
+                                  ? 'Demande de réactivation en attente de validation par l\'administration.'
+                                  : 'Jeu finalisé : modification désactivée. Vous pouvez encore supprimer le jeu.'}
                             </p>
                             <div className="flex items-center gap-2">
+                              {canCorrectDeactivatedGame(game) && (
+                                <motion.button
+                                  type="button"
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/educator/games/manage/${game.id}/edit`);
+                                  }}
+                                  className="p-2 rounded-lg border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
+                                  title="Modifier"
+                                  aria-label="Modifier"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </motion.button>
+                              )}
+                              {game.etat === 'ACCEPTE' && !game.actif && game.reactivationPending && (
+                                <motion.button
+                                  type="button"
+                                  whileHover={{ scale: 1.05 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={(e) => handleCancelReactivation(game, e)}
+                                  disabled={cancellingReactivationId === game.id}
+                                  className="px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors disabled:opacity-50 text-xs font-bold"
+                                  title="Annuler la demande de réactivation (cliqué par erreur ?)"
+                                >
+                                  {cancellingReactivationId === game.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Annuler la demande'}
+                                </motion.button>
+                              )}
                               {viewPath && (
                                 <motion.button
                                   type="button"
@@ -427,8 +493,8 @@ export default function EducatorManageGames() {
                         <tr key={game.id} className="border-b border-gray-100 hover:bg-gray-50/70 transition-colors">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg">
-                                {game.icone ?? TYPE_ICONS[game.typeJeu] ?? '🎮'}
+                              <div className="w-9 h-9 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center text-lg">
+                                {TYPE_ICONS[game.typeJeu] ?? '🎮'}
                               </div>
                               <div>
                                 <p className="font-semibold text-gray-900">{game.titre}</p>
@@ -436,11 +502,19 @@ export default function EducatorManageGames() {
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-700">{game.typeJeu}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{gameTypeFr(game.typeJeu) || game.typeJeu}</td>
                           <td className="px-4 py-3">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${status.color}`}>
-                              {status.icon} {status.label}
-                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${status.color}`}>
+                                {status.icon} {status.label}
+                              </span>
+                              {game.etat === 'ACCEPTE' && !game.actif && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-rose-100 text-rose-700 border-rose-200">
+                                  {game.reactivationPending ? <RefreshCw className="w-3 h-3" /> : <PowerOff className="w-3 h-3" />}
+                                  {game.reactivationPending ? 'Réactivation en attente' : 'Désactivé'}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700">{difficultyLabel(game.difficulte)}</td>
                           <td className="px-4 py-3 text-sm text-gray-700">{game.ageMin ?? '—'}-{game.ageMax ?? '—'} ans</td>
@@ -455,14 +529,29 @@ export default function EducatorManageGames() {
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
-                              {(game.etat === 'BROUILLON' || game.etat === 'REFUSE') && (
+                              {(game.etat === 'BROUILLON' || game.etat === 'REFUSE' || canCorrectDeactivatedGame(game)) && (
                                 <button
                                   type="button"
                                   onClick={() => navigate(`/educator/games/manage/${game.id}/edit`)}
-                                  className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+                                  className={`p-2 rounded-lg border transition-colors ${
+                                    canCorrectDeactivatedGame(game)
+                                      ? 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                  }`}
                                   title="Modifier"
                                 >
                                   <Edit className="w-4 h-4" />
+                                </button>
+                              )}
+                              {game.etat === 'ACCEPTE' && !game.actif && game.reactivationPending && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCancelReactivation(game, e)}
+                                  disabled={cancellingReactivationId === game.id}
+                                  className="px-3 py-1.5 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-colors disabled:opacity-50 text-xs font-bold"
+                                  title="Annuler la demande de réactivation"
+                                >
+                                  {cancellingReactivationId === game.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Annuler'}
                                 </button>
                               )}
                             </div>

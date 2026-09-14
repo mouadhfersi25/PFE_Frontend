@@ -19,6 +19,7 @@ const educatorVoiceApi = {
   deleteSeries: (id: number) => api.delete(EDUCATOR_ENDPOINTS.VOICE_SERIES_BY_ID(id)),
   publishSeries: (id: number) => api.patch<VoiceSeriesDTO>(EDUCATOR_ENDPOINTS.VOICE_SERIES_PUBLISH(id)),
   archiveSeries: (id: number) => api.patch<VoiceSeriesDTO>(EDUCATOR_ENDPOINTS.VOICE_SERIES_ARCHIVE(id)),
+  unarchiveSeries: (id: number) => api.patch<VoiceSeriesDTO>(EDUCATOR_ENDPOINTS.VOICE_SERIES_UNARCHIVE(id)),
 
   getPrompts: (seriesId: number) =>
     api.get<VoicePromptDTO[]>(EDUCATOR_ENDPOINTS.VOICE_PROMPTS, { params: { seriesId } }),

@@ -9,9 +9,10 @@ import educatorApi from '@/api/educator/educator.api';
 import type { GameDTO, QuizQuestionDTO } from '@/api/types/api.types';
 import { QuizVariantBadge } from '@/components/educator/QuizVariantPicker';
 import { getQuizVariantMeta } from '@/constants/quizVariants';
+import { canEditGameContent } from '@/utils/gameEditPolicy';
 
 function difficultyLabel(d: number | null): string {
-  return d === 1 ? 'Easy' : d === 2 ? 'Medium' : d === 3 ? 'Hard' : 'Medium';
+  return d === 1 ? 'Facile' : d === 2 ? 'Moyen' : d === 3 ? 'Difficile' : 'Moyen';
 }
 
 export default function GameQuestions() {
@@ -32,7 +33,7 @@ export default function GameQuestions() {
   useEffect(() => {
     if (!Number.isFinite(id)) {
       setLoading(false);
-      setError('Invalid game id');
+      setError('Identifiant de jeu invalide');
       return;
     }
     let cancelled = false;
@@ -46,7 +47,7 @@ export default function GameQuestions() {
         if (cancelled) return;
         const g = gameRes.data;
         if (!g || g.typeJeu !== 'QUIZ') {
-          setError('Game not found or not a quiz game.');
+          setError('Jeu introuvable ou ce n’est pas un jeu quiz.');
           setGame(null);
           setQuestionsForGame([]);
         } else {
@@ -57,7 +58,7 @@ export default function GameQuestions() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err?.response?.data?.message ?? err?.message ?? 'Failed to load game or questions.');
+          setError(err?.response?.data?.message ?? err?.message ?? 'Impossible de charger le jeu ou les questions.');
           setLoading(false);
         }
       });
@@ -65,15 +66,15 @@ export default function GameQuestions() {
   }, [id]);
 
   const handleDelete = (questionId: number) => {
-    if (!confirm('Are you sure you want to delete this question?')) return;
+    if (!confirm('Voulez-vous vraiment supprimer cette question ?')) return;
     educatorApi
       .deleteQuestion(questionId)
       .then(() => {
         setQuestionsForGame((prev) => prev.filter((q) => q.id !== questionId));
-        toast.success('Question deleted');
+        toast.success('Question supprimée');
       })
       .catch((err) => {
-        toast.error(err?.response?.data?.message ?? 'Failed to delete question.');
+        toast.error(err?.response?.data?.message ?? 'Échec de la suppression de la question.');
       });
   };
 
@@ -119,7 +120,7 @@ export default function GameQuestions() {
             mediaUrl: q.mediaUrl ?? undefined,
             promptAudioUrl: q.promptAudioUrl ?? undefined,
             explication: q.explication ?? undefined,
-            difficulte: q.difficulte ?? game.difficulte ?? undefined,
+            difficulte: q.difficulte ?? undefined,
           })
         )
       );
@@ -154,14 +155,14 @@ export default function GameQuestions() {
         <EducatorSidebar />
         <EducatorHeader />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-600">{error ?? 'Game not found.'}</p>
-          <button onClick={() => navigate('/educator/games/manage')} className="ml-4 text-green-600 hover:underline">Back to Games</button>
+          <p className="text-gray-600">{error ?? 'Jeu introuvable.'}</p>
+          <button onClick={() => navigate('/educator/games/manage')} className="ml-4 text-green-600 hover:underline">Retour aux jeux</button>
         </div>
       </div>
     );
   }
 
-  const canEdit = game.etat === 'BROUILLON' || game.etat === 'REFUSE';
+  const canEdit = canEditGameContent(game);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -172,11 +173,11 @@ export default function GameQuestions() {
         <div className="p-6 md:p-8">
           <div className="mb-5">
             <button
-              onClick={() => navigate('/educator/games/manage')}
+              onClick={() => navigate(`/educator/games/manage/${id}/edit`)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 mb-5 shadow-sm"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to Games
+              Retour aux infos du jeu
             </button>
 
             <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -205,7 +206,7 @@ export default function GameQuestions() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={() => setAiPanelOpen((o) => !o)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-emerald-200 text-emerald-700 rounded-xl hover:bg-emerald-50 font-medium"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-sky-200 text-sky-700 rounded-xl hover:bg-sky-50 font-medium"
                 >
                   <WandSparkles className="w-5 h-5" />
                   Générer avec IA
@@ -214,41 +215,42 @@ export default function GameQuestions() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate('/educator/questions/add', { state: { gameId: game.id } })}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-xl hover:shadow-lg font-medium"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl hover:shadow-lg font-medium"
                 >
                   <Plus className="w-5 h-5" />
-                  Add question
+                  Ajouter une question
                 </motion.button>
               </div>
             )}
           </div>
 
           {canEdit && aiPanelOpen && (
-            <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 md:p-5">
+            <div className="mb-6 rounded-2xl border border-sky-200 bg-sky-50/50 p-4 md:p-5">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
                 <div>
-                  <h3 className="text-base font-semibold text-emerald-900">Assistant IA - Génération de questions</h3>
-                  <p className="text-sm text-emerald-800/90">
+                  <h3 className="text-base font-semibold text-sky-900">Assistant IA - Génération de questions</h3>
+                  <p className="text-sm text-sky-800/90">
                     Génération pour la variante{' '}
                     <span className="font-semibold">{getQuizVariantMeta(game.quizVariant).label}</span>
                     {' '}selon le titre, la description, la difficulté, l&apos;âge et la durée du quiz.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <label className="text-sm text-gray-700">Nombre</label>
+                  <label htmlFor="ai-question-count" className="text-sm text-gray-700">Nombre</label>
                   <input
+                    id="ai-question-count"
                     type="number"
                     min={1}
                     max={10}
                     value={aiCount}
                     onChange={(e) => setAiCount(Math.min(10, Math.max(1, Number(e.target.value) || 1)))}
-                    className="w-20 px-3 py-2 rounded-lg border border-emerald-200 bg-white"
+                    className="w-20 px-3 py-2 rounded-lg border border-sky-200 bg-white"
                   />
                   <button
                     type="button"
                     onClick={handleGeneratePreview}
                     disabled={aiLoading}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:opacity-60"
                   >
                     {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
                     Générer
@@ -291,12 +293,12 @@ export default function GameQuestions() {
                           type="button"
                           onClick={() => togglePreviewSelection(idx)}
                           className={`w-full text-left rounded-xl border p-3 transition-colors ${
-                            selected ? 'border-emerald-300 bg-white' : 'border-slate-200 bg-slate-50'
+                            selected ? 'border-sky-300 bg-white' : 'border-slate-200 bg-slate-50'
                           }`}
                         >
                           <div className="flex items-start gap-3">
                             <div className="pt-0.5">
-                              {selected ? <CheckSquare className="w-5 h-5 text-emerald-600" /> : <Square className="w-5 h-5 text-slate-400" />}
+                              {selected ? <CheckSquare className="w-5 h-5 text-sky-600" /> : <Square className="w-5 h-5 text-slate-400" />}
                             </div>
                             <div>
                               <p className="font-medium text-slate-900">{q.contenu}</p>
@@ -306,7 +308,7 @@ export default function GameQuestions() {
                               {q.options && q.options.length > 0 && (
                                 <p className="text-xs text-slate-600 mt-1">Options: {q.options.join(' | ')}</p>
                               )}
-                              <p className="text-xs text-emerald-700 mt-1">Bonne réponse: {q.bonneReponse}</p>
+                              <p className="text-xs text-sky-700 mt-1">Bonne réponse: {q.bonneReponse}</p>
                             </div>
                           </div>
                         </button>
@@ -346,10 +348,10 @@ export default function GameQuestions() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => navigate('/educator/questions/add', { state: { gameId: game.id } })}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg font-medium"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-lg font-medium"
                 >
                   <Plus className="w-5 h-5" />
-                  Add question
+                  Ajouter une question
                 </motion.button>
               )}
             </motion.div>
@@ -364,7 +366,7 @@ export default function GameQuestions() {
                   <thead className="bg-gray-50/80">
                     <tr>
                       <th className="text-left py-4 px-6 text-xs uppercase tracking-wide font-semibold text-gray-600">Question</th>
-                      <th className="text-left py-4 px-6 text-xs uppercase tracking-wide font-semibold text-gray-600">Difficulty</th>
+                      <th className="text-left py-4 px-6 text-xs uppercase tracking-wide font-semibold text-gray-600">Difficulté</th>
                       <th className="text-left py-4 px-6 text-xs uppercase tracking-wide font-semibold text-gray-600">Actions</th>
                     </tr>
                   </thead>
@@ -392,7 +394,7 @@ export default function GameQuestions() {
                         <td className="py-4 px-6">
                           <span
                             className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              diff === 'Easy' ? 'bg-green-100 text-green-800' : diff === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                              diff === 'Facile' ? 'bg-green-100 text-green-800' : diff === 'Moyen' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                             }`}
                           >
                             {diff}
@@ -409,7 +411,7 @@ export default function GameQuestions() {
                                   navigate(`/educator/questions/${question.id}/edit`);
                                 }}
                                 className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                                title="Edit"
+                                title="Modifier"
                               >
                                 <Edit className="w-4 h-4" />
                               </motion.button>
@@ -421,7 +423,7 @@ export default function GameQuestions() {
                                   handleDelete(question.id);
                                 }}
                                 className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                title="Delete"
+                                title="Supprimer"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </motion.button>

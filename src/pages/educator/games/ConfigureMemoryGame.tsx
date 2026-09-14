@@ -7,6 +7,7 @@ import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
 import educatorApi from '@/api/educator/educator.api';
 import type { GameDTO, MemoryCardDTO } from '@/api/types/api.types';
+import { canEditGameContent } from '@/utils/gameEditPolicy';
 import {
   MEMORY_PAIR_MODES,
   COLOR_PRESETS,
@@ -115,7 +116,7 @@ export default function ConfigureMemoryGame() {
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   const inputClass =
-    'w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all bg-white';
+    'w-full px-4 py-2.5 rounded-xl border-2 border-gray-200 focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all bg-white';
 
   useEffect(() => {
     if (!Number.isFinite(id)) {
@@ -152,7 +153,7 @@ export default function ConfigureMemoryGame() {
     };
   }, [id]);
 
-  const canEdit = game?.etat === 'BROUILLON' || game?.etat === 'REFUSE';
+  const canEdit = canEditGameContent(game);
 
   const updatePair = (index: number, patch: Partial<PairRow>) => {
     if (!canEdit) return;
@@ -258,7 +259,7 @@ export default function ConfigureMemoryGame() {
         <EducatorSidebar />
         <EducatorHeader />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 pt-16">
-          <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+          <Loader2 className="w-10 h-10 text-sky-500 animate-spin" />
           <p className="text-gray-600 text-sm">Chargement…</p>
         </div>
       </div>
@@ -275,7 +276,7 @@ export default function ConfigureMemoryGame() {
           <button
             type="button"
             onClick={() => navigate('/educator/games/manage')}
-            className="text-emerald-600 font-semibold hover:underline"
+            className="text-sky-600 font-semibold hover:underline"
           >
             Retour aux jeux
           </button>
@@ -293,27 +294,27 @@ export default function ConfigureMemoryGame() {
         <div className="p-8 max-w-4xl mx-auto">
           <button
             type="button"
-            onClick={() => navigate('/educator/games/manage')}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-semibold shadow-sm hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 transition-all mb-6"
+            onClick={() => navigate(`/educator/games/manage/${id}/edit`)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-semibold shadow-sm hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1 transition-all mb-6"
           >
             <ArrowLeft className="w-4 h-4 shrink-0" />
-            Retour à la liste des jeux
+            Retour aux infos du jeu
           </button>
 
-          <div className="h-24 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center px-6 mb-6 shadow-lg">
+          <div className="h-24 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-500 flex items-center px-6 mb-6 shadow-lg">
             <div>
               <h1 className="text-2xl font-bold text-white drop-shadow-sm">{game.titre}</h1>
               <p className="text-white/90 text-sm mt-1">Configurer les paires de cartes mémoire</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 mb-8 text-sm text-emerald-900">
+          <div className="rounded-2xl border border-sky-100 bg-sky-50/60 p-4 mb-8 text-sm text-sky-900">
             <p className="font-semibold mb-2">Types de paires disponibles</p>
             <ul className="space-y-1.5">
               {MEMORY_PAIR_MODES.map((m) => (
                 <li key={m.value}>
                   <strong>{m.label}</strong> — {m.description}{' '}
-                  <span className="text-emerald-700 italic">(ex. {m.example})</span>
+                  <span className="text-sky-700 italic">(ex. {m.example})</span>
                 </li>
               ))}
             </ul>
@@ -333,7 +334,7 @@ export default function ConfigureMemoryGame() {
               type="button"
               onClick={addPair}
               disabled={saving || !canEdit}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 disabled:opacity-50 shadow-sm transition-colors"
             >
               <Plus className="w-4 h-4" />
               Ajouter une paire
@@ -386,8 +387,8 @@ export default function ConfigureMemoryGame() {
                           }
                           className={`rounded-xl border-2 px-3 py-2.5 text-left text-sm transition-all ${
                             row.mode === m.value
-                              ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/20'
-                              : 'border-gray-200 bg-gray-50 hover:border-emerald-300'
+                              ? 'border-sky-500 bg-sky-50 ring-2 ring-sky-500/20'
+                              : 'border-gray-200 bg-gray-50 hover:border-sky-300'
                           } disabled:opacity-50`}
                         >
                           <span className="font-bold text-gray-900">{m.label}</span>
@@ -407,13 +408,14 @@ export default function ConfigureMemoryGame() {
                           type="button"
                           disabled={!canEdit}
                           onClick={() => setOpenPickerIndex(openPickerIndex === index ? null : index)}
-                          className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-5xl bg-gray-50 hover:border-emerald-400 hover:bg-emerald-50 transition-colors disabled:opacity-50 shrink-0"
+                          className="w-20 h-20 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-5xl bg-gray-50 hover:border-sky-400 hover:bg-sky-50 transition-colors disabled:opacity-50 shrink-0"
                         >
                           {row.card1Value || '?'}
                         </button>
                         <div className="flex-1 min-w-[12rem]">
-                          <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
+                          <label htmlFor={`pair-${index}-card1`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
                           <input
+                            id={`pair-${index}-card1`}
                             type="text"
                             value={row.card1Value}
                             disabled={!canEdit}
@@ -435,7 +437,7 @@ export default function ConfigureMemoryGame() {
                                   updatePair(index, { card1Value: ic });
                                   setOpenPickerIndex(null);
                                 }}
-                                className="w-10 h-10 flex items-center justify-center text-2xl rounded-lg hover:bg-emerald-100 transition-colors"
+                                className="w-10 h-10 flex items-center justify-center text-2xl rounded-lg hover:bg-sky-100 transition-colors"
                               >
                                 {ic}
                               </button>
@@ -449,8 +451,9 @@ export default function ConfigureMemoryGame() {
                   {row.mode === 'BILINGUAL' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
+                        <label htmlFor={`pair-${index}-card1`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
                         <input
+                          id={`pair-${index}-card1`}
                           type="text"
                           value={row.card1Value}
                           disabled={!canEdit}
@@ -460,8 +463,9 @@ export default function ConfigureMemoryGame() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card2Label}</label>
+                        <label htmlFor={`pair-${index}-card2`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card2Label}</label>
                         <input
+                          id={`pair-${index}-card2`}
                           type="text"
                           value={row.card2Value}
                           disabled={!canEdit}
@@ -476,8 +480,9 @@ export default function ConfigureMemoryGame() {
                   {row.mode === 'IMAGE_WORD' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
+                        <label htmlFor={`pair-${index}-card1`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
                         <input
+                          id={`pair-${index}-card1`}
                           type="url"
                           value={row.card1Value.startsWith('data:') ? '' : row.card1Value}
                           disabled={!canEdit}
@@ -511,8 +516,9 @@ export default function ConfigureMemoryGame() {
                         )}
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card2Label}</label>
+                        <label htmlFor={`pair-${index}-card2`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card2Label}</label>
                         <input
+                          id={`pair-${index}-card2`}
                           type="text"
                           value={row.card2Value}
                           disabled={!canEdit}
@@ -527,7 +533,7 @@ export default function ConfigureMemoryGame() {
                   {row.mode === 'COLOR_WORD' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
+                        <label htmlFor={`pair-${index}-card1`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card1Label}</label>
                         <div className="flex flex-wrap gap-2 mb-3">
                           {COLOR_PRESETS.map((c) => (
                             <button
@@ -538,7 +544,7 @@ export default function ConfigureMemoryGame() {
                               onClick={() => updatePair(index, { card1Value: c.hex })}
                               className={`w-9 h-9 rounded-full border-2 transition-transform hover:scale-110 ${
                                 row.card1Value.toLowerCase() === c.hex.toLowerCase()
-                                  ? 'border-emerald-500 ring-2 ring-emerald-500/30'
+                                  ? 'border-sky-500 ring-2 ring-sky-500/30'
                                   : 'border-gray-300'
                               }`}
                               style={{ backgroundColor: c.hex }}
@@ -547,6 +553,7 @@ export default function ConfigureMemoryGame() {
                         </div>
                         <div className="flex items-center gap-3">
                           <input
+                            id={`pair-${index}-card1`}
                             type="color"
                             value={row.card1Value.startsWith('#') ? row.card1Value : '#ef4444'}
                             disabled={!canEdit}
@@ -555,6 +562,7 @@ export default function ConfigureMemoryGame() {
                           />
                           <input
                             type="text"
+                            aria-label={`${meta.card1Label} (code hexadécimal)`}
                             value={row.card1Value}
                             disabled={!canEdit}
                             onChange={(e) => updatePair(index, { card1Value: e.target.value })}
@@ -564,8 +572,9 @@ export default function ConfigureMemoryGame() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">{meta.card2Label}</label>
+                        <label htmlFor={`pair-${index}-card2`} className="block text-sm font-semibold text-gray-700 mb-2">{meta.card2Label}</label>
                         <input
+                          id={`pair-${index}-card2`}
                           type="text"
                           value={row.card2Value}
                           disabled={!canEdit}
@@ -582,7 +591,7 @@ export default function ConfigureMemoryGame() {
                       type="button"
                       onClick={() => savePair(index)}
                       disabled={saving || !canEdit}
-                      className="px-6 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 shadow-sm transition-colors"
+                      className="px-6 py-2.5 text-sm font-semibold bg-sky-600 text-white rounded-xl hover:bg-sky-700 disabled:opacity-50 shadow-sm transition-colors"
                     >
                       {saving ? 'Enregistrement…' : 'Enregistrer la paire'}
                     </button>

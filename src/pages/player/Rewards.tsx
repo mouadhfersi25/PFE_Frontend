@@ -194,7 +194,7 @@ export default function Rewards() {
       const safeName = reward.nom.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       doc.save(`recompense_${safeName}_${claimRef}.pdf`);
     } catch {
-      toast.error("Impossible de generer le PDF de la recompense.");
+      toast.error("Impossible de générer le PDF de la récompense.");
     }
   };
 
@@ -262,6 +262,9 @@ export default function Rewards() {
             }`}>
               {claimed ? <LockOpen className="h-4 w-4" /> : pending ? 'En attente sponsor' : 'Bloquée'}
             </span>
+            {locked && reward.unlockCondition && (
+              <p className="text-xs text-slate-400">{reward.unlockCondition}</p>
+            )}
           </div>
         )}
       </motion.article>

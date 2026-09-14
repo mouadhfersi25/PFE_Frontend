@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { Upload, X } from 'lucide-react';
 
 type MediaKind = 'image' | 'audio';
@@ -23,6 +23,7 @@ export default function QuestionMediaField({
   disabled,
 }: QuestionMediaFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const fieldId = useId();
   const accept = kind === 'image' ? 'image/*' : 'audio/*';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -40,7 +41,7 @@ export default function QuestionMediaField({
 
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
+      <label htmlFor={fieldId} className="block text-sm font-medium text-gray-700 mb-2">
         {label}
         {required ? <span className="text-red-500"> *</span> : null}
       </label>
@@ -57,6 +58,7 @@ export default function QuestionMediaField({
         </button>
         <input
           ref={inputRef}
+          id={fieldId}
           type="file"
           accept={accept}
           className="hidden"

@@ -104,9 +104,9 @@ export default function Badges() {
               <ArrowLeft className="w-6 h-6 text-white" />
             </motion.button>
             <div>
-              <h1 className="text-2xl font-bold text-white">Badges Collection</h1>
+              <h1 className="text-2xl font-bold text-white">Collection de badges</h1>
               <p className="text-sm text-slate-300">
-                {earnedCount} of {badges.length} badges earned
+                {earnedCount} sur {badges.length} badges obtenus
               </p>
             </div>
           </div>
@@ -123,8 +123,8 @@ export default function Badges() {
         >
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-2xl font-bold mb-1">Your Progress</h3>
-              <p className="text-white/90">Keep collecting badges to unlock special rewards!</p>
+              <h3 className="text-2xl font-bold mb-1">Ta progression</h3>
+              <p className="text-white/90">Continue à collectionner des badges pour débloquer des récompenses !</p>
             </div>
             <div className="text-right">
               <p className="text-5xl font-bold">{earnedCount}</p>
@@ -276,11 +276,11 @@ export default function Badges() {
         >
           <div className="flex items-center gap-3 mb-3">
             <span className="text-3xl">🎯</span>
-            <h3 className="text-xl font-bold text-white">Keep Going!</h3>
+            <h3 className="text-xl font-bold text-white">Continue !</h3>
           </div>
           <p className="text-slate-300">
-            Complete challenges and games to unlock more badges. Each badge represents a unique
-            achievement in your learning journey!
+            Relève des défis et joue pour débloquer plus de badges. Chaque badge représente une
+            réussite unique dans ton parcours d'apprentissage !
           </p>
         </motion.div>
       </div>
@@ -327,7 +327,7 @@ export default function Badges() {
             >
               {renderBadgeIcon(celebrationBadge, false)}
             </motion.div>
-            <p className="text-xs uppercase tracking-[0.2em] text-amber-200 font-bold mb-2">CONGRATULATIONS</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-200 font-bold mb-2">FÉLICITATIONS</p>
             <h3 className="text-3xl font-black mb-2">Badge Réclamé !</h3>
             <p className="text-xl font-bold text-amber-200">{celebrationBadge.nom}</p>
             <p className="text-sm text-slate-200 mt-2">{celebrationBadge.description || 'Nouveau badge obtenu.'}</p>

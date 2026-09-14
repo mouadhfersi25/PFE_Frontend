@@ -25,6 +25,7 @@ interface RegisterRequest {
   email: string;
   password: string;
   dateDeNaissance: string; // ISO date (YYYY-MM-DD)
+  cin: string;
   telephone?: string;
 }
 
@@ -69,7 +70,8 @@ export interface UserDTO {
   idRegion: number | null;
   idPays: number | null;
   onboardingCompleted: boolean;
-  idGenre: number | null;
+  /** Genre déclaré à l'inscription (HOMME / FEMME). */
+  genre: string | null;
   resetToken: string | null;
   resetTokenExpiry: string | null;
   tokenVerification: string | null;
@@ -103,6 +105,8 @@ export interface LinkedChildProfileDTO {
   skillLogic: number | null;
   skillMemory: number | null;
   skillReflex: number | null;
+  weeklyPlaytimeMinutes: number | null;
+  averageSuccessRate: number | null;
   onboardingCompleted: boolean;
 }
 
@@ -188,7 +192,7 @@ export interface CompetitiveRoomPlayerResultDTO {
   playerName: string;
   submitted: boolean;
   score?: number | null;
-  outcome: 'PENDING' | 'WINNER' | 'LOSER' | 'DRAW';
+  outcome: 'PENDING' | 'WINNER' | 'LOSER' | 'DRAW' | 'ABANDONED';
 }
 
 export interface CompetitiveRoomResultDTO {
@@ -331,6 +335,10 @@ export interface ReclamationDTO {
   gameId: number;
   gameTitle: string;
   gameType: string;
+  /** État actuel du jeu (peut avoir changé depuis le signalement). */
+  gameActif: boolean;
+  /** Détails de désactivation les plus récents pour ce jeu, si applicable. */
+  gameDeactivationReason: string | null;
   sessionId: number;
   playerId: number;
   playerPrenom: string;
@@ -438,12 +446,26 @@ export interface SponsorPubliciteDTO {
   status?: string | null;
   typePublicite?: string | null;
   imageUrl?: string | null;
+  videoUrl?: string | null;
   adDurationSeconds?: number | null;
   ctaLabel?: string | null;
   ctaUrl?: string | null;
-  budgetUtilise?: number | null;
   nbVues?: number | null;
   nbClics?: number | null;
+  sponsorId?: number | null;
+  sponsorNom?: string | null;
+  sponsorEmail?: string | null;
+  jeuIds?: number[] | null;
+  jeuTitres?: string[] | null;
+}
+
+export interface PlayerAdDTO {
+  id: number;
+  contenu: string;
+  videoUrl: string;
+  adDurationSeconds?: number | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
   sponsorNom?: string | null;
 }
 
@@ -453,7 +475,9 @@ export interface SponsorRecompenseDTO {
   description?: string | null;
   scoreMin?: number | null;
   typeRecompense?: string | null;
+  sponsorId?: number | null;
   sponsorNom?: string | null;
+  sponsorEmail?: string | null;
   stockTotal?: number | null;
   stockRemaining?: number | null;
   distributedCount?: number | null;
@@ -490,8 +514,6 @@ interface CreatePubliciteInteractionRequest {
 /** Valeurs possibles pour typeJeu (backend enum TypeJeu) */
 export type TypeJeu = 'QUIZ' | 'MEMOIRE' | 'REFLEXE' | 'LOGIQUE';
 
-export type QuizPlayMode = 'CLASSIC' | 'BLITZ_60S';
-
 export type QuizVariant =
   | 'DEFAULT'
   | 'TRUE_FALSE'
@@ -508,20 +530,21 @@ export type ModeJeu = 'INDIVIDUEL' | 'EN_LIGNE';
 /** Valeurs possibles pour l'état du jeu (backend enum EtatJeu) */
 export type EtatJeu = 'BROUILLON' | 'EN_ATTENTE' | 'ACCEPTE' | 'REFUSE';
 
+/** Difficulté d'un jeu (backend enum Difficulte). */
+export type Difficulte = 'FACILE' | 'MOYEN' | 'DIFFICILE';
+
 /** POST /api/admin/games - body */
 export interface CreateGameRequest {
   titre: string;
   description?: string;
-  difficulte?: number;
+  difficulte?: Difficulte;
   ageMin?: number;
   ageMax?: number;
   typeJeu: TypeJeu;
   modeJeu: ModeJeu;
   dureeMinutes?: number;
-  icone?: string;
   coverImageUrl?: string;
   actif?: boolean;
-  quizPlayMode?: QuizPlayMode;
   quizVariant?: QuizVariant;
 }
 
@@ -529,16 +552,14 @@ export interface CreateGameRequest {
 export interface UpdateGameRequest {
   titre?: string;
   description?: string;
-  difficulte?: number;
+  difficulte?: Difficulte;
   ageMin?: number;
   ageMax?: number;
   typeJeu?: TypeJeu;
   modeJeu?: ModeJeu;
   dureeMinutes?: number;
-  icone?: string;
   coverImageUrl?: string;
   actif?: boolean;
-  quizPlayMode?: QuizPlayMode;
   quizVariant?: QuizVariant;
 }
 
@@ -547,19 +568,29 @@ export interface GameDTO {
   id: number;
   titre: string;
   description: string | null;
-  difficulte: number | null;
+  difficulte: Difficulte | null;
   ageMin: number | null;
   ageMax: number | null;
   typeJeu: TypeJeu;
   modeJeu: ModeJeu;
-  quizPlayMode?: QuizPlayMode | null;
   quizVariant?: QuizVariant | null;
   actif: boolean;
+  /** Demande de réactivation envoyée par l'éducateur, en attente de décision admin. */
+  reactivationPending: boolean;
   dureeMinutes: number | null;
-  icone: string | null;
   coverImageUrl: string | null;
+  /** Éducateur créateur du jeu (null pour les jeux créés directement par l'admin). */
+  educatorId: number | null;
+  educatorName: string | null;
+  educatorEmail: string | null;
+  /** Nombre de parties jouées (toutes sessions confondues) pour ce jeu. */
+  sessionsCount: number;
   etat: EtatJeu;
   latestRefusalReason: string | null;
+  /** Motif de la dernière désactivation admin (signalement), s'il y en a eu une. */
+  latestDeactivationReason: string | null;
+  /** Motif du dernier refus admin d'une demande de réactivation, s'il y en a eu un. */
+  latestReactivationRejectionReason: string | null;
   dateCreation: string | null;
 }
 

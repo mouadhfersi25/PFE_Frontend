@@ -12,7 +12,7 @@ import { QuizVariantBadge } from '@/components/educator/QuizVariantPicker';
 import { QUIZ_VARIANT_CATALOG } from '@/constants/quizVariants';
 
 const TYPE_CONFIGS: Record<string, { label: string; bg: string; icon: React.ReactNode; defaultIcon: string; path: string; dbType: string; hasContentPage: boolean }> = {
-  quiz: { label: 'Quiz', bg: 'bg-emerald-500', icon: <HelpCircle className="w-5 h-5" />, defaultIcon: '🧮', path: 'questions', dbType: 'QUIZ', hasContentPage: true },
+  quiz: { label: 'Quiz', bg: 'bg-sky-500', icon: <HelpCircle className="w-5 h-5" />, defaultIcon: '🧮', path: 'questions', dbType: 'QUIZ', hasContentPage: true },
   memory: { label: 'Mémoire', bg: 'bg-purple-500', icon: <Layers className="w-5 h-5" />, defaultIcon: '🧠', path: 'configure', dbType: 'MEMOIRE', hasContentPage: true },
   reflex: { label: 'Réflexe', bg: 'bg-amber-500', icon: <Zap className="w-5 h-5" />, defaultIcon: '⚡', path: 'configure', dbType: 'REFLEXE', hasContentPage: true },
   logic: { label: 'Logique', bg: 'bg-blue-500', icon: <Puzzle className="w-5 h-5" />, defaultIcon: '🎯', path: 'configure', dbType: 'LOGIQUE', hasContentPage: true },
@@ -178,8 +178,8 @@ export default function EducatorGameTypeSection() {
           </div>
 
           {dbType === 'QUIZ' && (
-            <div className="mb-8 rounded-2xl border border-emerald-200 bg-white p-4 md:p-5 shadow-sm">
-              <h2 className="text-sm font-bold text-emerald-900 uppercase tracking-wide mb-3">
+            <div className="mb-8 rounded-2xl border border-sky-200 bg-white p-4 md:p-5 shadow-sm">
+              <h2 className="text-sm font-bold text-sky-900 uppercase tracking-wide mb-3">
                 Les 7 variantes de quiz
               </h2>
               <p className="text-sm text-gray-600 mb-4">
@@ -204,7 +204,7 @@ export default function EducatorGameTypeSection() {
 
           {loading && (
             <div className="flex justify-center py-12">
-              <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+              <Loader2 className="w-8 h-8 text-sky-500 animate-spin" />
             </div>
           )}
 
@@ -231,7 +231,7 @@ export default function EducatorGameTypeSection() {
                     <div className="p-5 flex items-start justify-between border-b border-gray-50 bg-gray-50/50">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-2xl border border-gray-100">
-                          {game.icone ?? config.defaultIcon}
+                          {config.defaultIcon}
                         </div>
                         <div>
                           <h3 className="font-bold text-gray-900 max-w-[200px] truncate" title={game.titre}>{game.titre}</h3>
@@ -244,8 +244,8 @@ export default function EducatorGameTypeSection() {
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-2">
-                         <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${game.actif ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                           <span className={`w-1.5 h-1.5 rounded-full ${game.actif ? 'bg-green-500' : 'bg-gray-400'}`} />
+                         <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${game.actif ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-500'}`}>
+                           <span className={`w-1.5 h-1.5 rounded-full ${game.actif ? 'bg-sky-500' : 'bg-gray-400'}`} />
                            {game.actif ? 'Actif' : 'Inactif'}
                          </span>
                       </div>
@@ -258,7 +258,9 @@ export default function EducatorGameTypeSection() {
                       <div className="flex items-center justify-between text-sm text-gray-500 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
                         <div className="text-center w-1/3 border-r border-gray-200">
                            <p className="text-[10px] uppercase font-bold text-gray-400">Diff</p>
-                           <p className="font-medium text-gray-800">{game.difficulte}/10</p>
+                           <p className="font-medium text-gray-800">
+                             {game.difficulte === 'FACILE' ? 'Facile' : game.difficulte === 'DIFFICILE' ? 'Difficile' : game.difficulte === 'MOYEN' ? 'Moyen' : '—'}
+                           </p>
                         </div>
                         <div className="text-center w-1/3 border-r border-gray-200">
                            <p className="text-[10px] uppercase font-bold text-gray-400">Âge</p>
@@ -304,7 +306,7 @@ export default function EducatorGameTypeSection() {
                                   type="button"
                                   onClick={(e) => toggleGameActive(game, e)}
                                   disabled={togglingId === game.id}
-                                  className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 disabled:opacity-60 ${game.actif ? 'bg-green-500' : 'bg-slate-300'}`}
+                                  className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1 disabled:opacity-60 ${game.actif ? 'bg-sky-500' : 'bg-slate-300'}`}
                                 >
                                   <span className={`pointer-events-none absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform duration-200 ${game.actif ? 'translate-x-4' : 'translate-x-0'}`} />
                                 </button>

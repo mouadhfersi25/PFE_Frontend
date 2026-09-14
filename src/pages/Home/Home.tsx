@@ -1,19 +1,20 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import type { CSSProperties } from "react";
 
 export default function Home() {
   const navigate = useNavigate();
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    const handleMouseMove = (e) => {
+    const handleMouseMove = (e: MouseEvent) => {
       setMousePosition({ x: e.clientX, y: e.clientY });
     };
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
-  const styles = {
+  const styles: Record<string, CSSProperties> = {
     pageContainer: {
       minHeight: "100vh",
       display: "flex",
@@ -304,7 +305,7 @@ export default function Home() {
             <div style={styles.badge}>
               <span>✨</span> Apprentissage ludique
             </div>
-            <h1 style={styles.title}>EduGame Platforme</h1>
+            <h1 style={styles.title}>EduGame Plateforme</h1>
             <p style={styles.subtitle}>
               Apprends en jouant, progresse en t'amusant !
             </p>
@@ -388,7 +389,7 @@ export default function Home() {
               }}
             >
               <div style={styles.featureIcon}>🏆</div>
-              <h3 style={styles.featureTitle}>Badges & Niveaux</h3>
+              <h3 style={styles.featureTitle}>Badges et niveaux</h3>
               <p style={styles.featureDescription}>
                 Gagne des badges, monte de niveau et deviens un champion !
               </p>

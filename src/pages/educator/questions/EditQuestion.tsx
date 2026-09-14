@@ -17,7 +17,8 @@ import {
 } from '@/constants/quizVariants';
 import { QuizVariantBadge } from '@/components/educator/QuizVariantPicker';
 
-const OPTIONS_COUNT = 4; { value: number; label: string }[] = [
+const OPTIONS_COUNT = 4;
+const DIFFICULTE_OPTIONS: { value: number; label: string }[] = [
   { value: 1, label: 'Facile' },
   { value: 2, label: 'Moyen' },
   { value: 3, label: 'Difficile' },
@@ -215,7 +216,7 @@ export default function EditQuestion() {
   };
 
   const inputClass =
-    'w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500';
+    'w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500';
 
   if (loading) {
     return (
@@ -223,7 +224,7 @@ export default function EditQuestion() {
         <EducatorSidebar />
         <EducatorHeader />
         <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-10 h-10 text-green-500 animate-spin" />
+          <Loader2 className="w-10 h-10 text-sky-500 animate-spin" />
         </div>
       </div>
     );
@@ -238,7 +239,7 @@ export default function EditQuestion() {
           <p className="text-gray-600">Question introuvable.</p>
           <button
             onClick={() => navigate('/educator/games/manage')}
-            className="text-green-600 hover:underline font-medium"
+            className="text-sky-600 hover:underline font-medium"
           >
             Retour aux jeux
           </button>
@@ -275,7 +276,7 @@ export default function EditQuestion() {
           >
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="question-contenu" className="block text-sm font-medium text-gray-700 mb-2">
                   {isTrueFalse(gameVariant)
                     ? 'Affirmation'
                     : isCloze(gameVariant)
@@ -284,6 +285,7 @@ export default function EditQuestion() {
                   <span className="text-red-500">*</span>
                 </label>
                 <textarea
+                  id="question-contenu"
                   value={formData.contenu}
                   onChange={(e) => setFormData({ ...formData, contenu: e.target.value })}
                   className={`${inputClass} min-h-[100px]`}
@@ -346,7 +348,7 @@ export default function EditQuestion() {
                         className={`px-6 py-5 rounded-xl border-2 text-lg font-bold transition-all ${
                           formData.correctAnswerIndex === index
                             ? label === 'Vrai'
-                              ? 'border-green-500 bg-green-50 text-green-800'
+                              ? 'border-sky-500 bg-sky-50 text-sky-800'
                               : 'border-red-500 bg-red-50 text-red-800'
                             : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                         }`}
@@ -369,7 +371,7 @@ export default function EditQuestion() {
                           name="correctAnswer"
                           checked={formData.correctAnswerIndex === index && option.trim() !== ''}
                           onChange={() => setFormData({ ...formData, correctAnswerIndex: index })}
-                          className="w-4 h-4 text-green-600 shrink-0"
+                          className="w-4 h-4 text-sky-600 shrink-0"
                         />
                         <input
                           type="text"
@@ -395,7 +397,7 @@ export default function EditQuestion() {
                         name="correctAnswer"
                         checked={formData.correctAnswerIndex === index}
                         onChange={() => setFormData({ ...formData, correctAnswerIndex: index })}
-                        className="w-4 h-4 text-green-600 shrink-0"
+                        className="w-4 h-4 text-sky-600 shrink-0"
                       />
                       <input
                         type="text"
@@ -415,10 +417,11 @@ export default function EditQuestion() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="question-explication" className="block text-sm font-medium text-gray-700 mb-2">
                   Explication (optionnel)
                 </label>
                 <textarea
+                  id="question-explication"
                   value={formData.explication}
                   onChange={(e) => setFormData({ ...formData, explication: e.target.value })}
                   className={`${inputClass} min-h-[80px]`}
@@ -427,10 +430,11 @@ export default function EditQuestion() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="question-difficulte" className="block text-sm font-medium text-gray-700 mb-2">
                   Difficulté (optionnel)
                 </label>
                 <select
+                  id="question-difficulte"
                   value={formData.difficulte === '' ? '' : formData.difficulte}
                   onChange={(e) =>
                     setFormData({
@@ -455,7 +459,7 @@ export default function EditQuestion() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:shadow-lg transition-shadow font-medium disabled:opacity-60"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium disabled:opacity-60"
                 >
                   {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Enregistrer les modifications

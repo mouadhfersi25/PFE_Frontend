@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Search, Filter, Eye, Ban, Check, X, Loader2, UserCheck, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Eye, Ban, Check, X, Loader2, UserCheck, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context';
 import type { UserDTO } from '@/data/types';
 import adminApi from '@/api/admin';
+import { statusFr } from '@/utils/frLabels';
 
 export default function Players() {
   const { user: currentUser } = useAuth();
@@ -25,7 +26,7 @@ export default function Players() {
   const isCurrentUser = (user: UserDTO) =>
     currentUser?.email && user.email?.toLowerCase() === currentUser.email.toLowerCase();
 
-  const ROLES_EDITABLE = ['JOUEUR', 'PARENT', 'EDUCATEUR'] as const;
+  const ROLES_EDITABLE = ['JOUEUR', 'PARENT', 'EDUCATEUR', 'SPONSOR'] as const;
   const canChangeRole = (user: UserDTO) => !isCurrentUser(user) && user.role?.toUpperCase() !== 'ADMIN';
 
   const handleRoleChange = (user: UserDTO, newRole: string) => {
@@ -132,11 +133,23 @@ export default function Players() {
   return (
     <div className="p-5 md:p-6 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 min-h-full">
           <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white/70 p-4 md:p-5 mb-5 shadow-sm">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 mb-3 border border-slate-200">
-              <UserCheck className="w-4 h-4 text-violet-600" />
-              Manage Users
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 mb-3 border border-slate-200">
+                  <UserCheck className="w-4 h-4 text-violet-600" />
+                  Gérer les utilisateurs
+                </div>
+                <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Gérer les utilisateurs</h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/admin/players/create-staff')}
+                className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-violet-500"
+              >
+                <UserPlus className="w-4 h-4" />
+                Créer éducateur / sponsor
+              </button>
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Manage Users</h1>
           </div>
 
           <motion.div
@@ -149,7 +162,7 @@ export default function Players() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by name or email..."
+                  placeholder="Rechercher par nom ou e-mail..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
@@ -162,15 +175,15 @@ export default function Players() {
                   onChange={(e) => { setFilterLevel(e.target.value); setPage(1); }}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none"
                 >
-                  <option value="all">All Levels</option>
-                  <option value="1">Level 1</option>
-                  <option value="2">Level 2</option>
-                  <option value="3">Level 3</option>
-                  <option value="4">Level 4</option>
-                  <option value="5">Level 5</option>
-                  <option value="6">Level 6</option>
-                  <option value="7">Level 7</option>
-                  <option value="8">Level 8</option>
+                  <option value="all">Tous les niveaux</option>
+                  <option value="1">Niveau 1</option>
+                  <option value="2">Niveau 2</option>
+                  <option value="3">Niveau 3</option>
+                  <option value="4">Niveau 4</option>
+                  <option value="5">Niveau 5</option>
+                  <option value="6">Niveau 6</option>
+                  <option value="7">Niveau 7</option>
+                  <option value="8">Niveau 8</option>
                 </select>
               </div>
               <div className="relative">
@@ -180,9 +193,9 @@ export default function Players() {
                   onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none"
                 >
-                  <option value="all">All Status</option>
-                  <option value="ACTIF">Active</option>
-                  <option value="SUSPENDU">Suspended</option>
+                  <option value="all">Tous les statuts</option>
+                  <option value="ACTIF">Actif</option>
+                  <option value="SUSPENDU">Suspendu</option>
                 </select>
               </div>
               <div className="relative">
@@ -192,10 +205,11 @@ export default function Players() {
                   onChange={(e) => { setFilterRole(e.target.value); setPage(1); }}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 appearance-none"
                 >
-                  <option value="all">All Roles</option>
+                  <option value="all">Tous les rôles</option>
                   <option value="JOUEUR">Joueur</option>
                   <option value="PARENT">Parent</option>
                   <option value="EDUCATEUR">Éducateur</option>
+                  <option value="SPONSOR">Sponsor</option>
                   <option value="ADMIN">Admin</option>
                 </select>
               </div>
@@ -234,7 +248,7 @@ export default function Players() {
                           {sortBy === 'name' ? (sortDir === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />) : <ArrowUpDown className="w-4 h-4 text-gray-400" />}
                         </button>
                       </th>
-                      <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Role</th>
+                      <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Rôle</th>
                       <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Niveau</th>
                       <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">Score total</th>
                       <th className="text-left py-4 px-6 text-sm font-semibold text-gray-700">État compte</th>
@@ -310,7 +324,7 @@ export default function Players() {
                             user.etatCompte === 'ACTIF' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                           }`}>
                             {user.etatCompte === 'ACTIF' ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                            {user.etatCompte}
+                            {statusFr(user.etatCompte) || user.etatCompte}
                           </span>
                         </td>
                         <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
@@ -358,7 +372,7 @@ export default function Players() {
 
               {filteredUsers.length === 0 && (
                 <div className="py-12 text-center text-gray-500">
-                  <p>No users found matching your filters</p>
+                  <p>Aucun utilisateur ne correspond à vos filtres</p>
                 </div>
               )}
 

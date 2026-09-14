@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Plus, Save, Trash2, Loader2 } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Trash2, Loader2, ArchiveRestore } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import EducatorSidebar from '@/components/educator/EducatorSidebar';
@@ -66,11 +66,33 @@ export default function VoiceSeriesEditor() {
         }));
         setPrompts(rows.length > 0 ? rows : [emptyPrompt()]);
       })
-      .catch(() => toast.error('Série introuvable'))
+      .catch((err: unknown) => {
+        const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+        toast.error(message || 'Série introuvable');
+      })
       .finally(() => setLoading(false));
   }, [id, isEdit]);
 
-  const canEdit = etat === 'BROUILLON';
+  const canEdit = etat === 'BROUILLON' || etat === 'PUBLIE';
+
+  const handleUnarchive = async () => {
+    if (!seriesId) return;
+    setSaving(true);
+    try {
+      const res = await educatorVoiceApi.unarchiveSeries(seriesId);
+      setEtat(res.data.etat);
+      toast.success(
+        res.data.etat === 'PUBLIE'
+          ? 'Série désarchivée et republicée'
+          : 'Série désarchivée (brouillon)'
+      );
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      toast.error(message || 'Désarchivage impossible');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const updatePrompt = (index: number, patch: Partial<PromptDraft>) => {
     setPrompts((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -156,51 +178,79 @@ export default function VoiceSeriesEditor() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-slate-100">
       <EducatorSidebar />
       <div className="flex-1 flex flex-col min-w-0">
-        <EducatorHeader title={isEdit ? 'Éditer la série orale' : 'Nouvelle série orale'} />
-        <main className="flex-1 p-6 max-w-4xl">
+        <EducatorHeader />
+        <main className="flex-1 p-5 md:p-8 max-w-4xl w-full" style={{ paddingTop: '110px' }}>
           <button
             type="button"
             onClick={() => navigate('/educator/voice/series')}
-            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6"
+            className="inline-flex items-center gap-2 text-slate-600 hover:text-slate-900 mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
             Retour aux séries
           </button>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 mb-6 space-y-4">
-            <h2 className="text-lg font-bold text-gray-900">Informations</h2>
+          {etat === 'ARCHIVE' && (
+            <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <p className="text-sm text-amber-900">
+                Cette série est archivée (lecture seule). Désarchivez-la pour modifier le titre, la description ou les consignes.
+              </p>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => void handleUnarchive()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 text-white text-sm font-semibold hover:bg-sky-500 disabled:opacity-50 shrink-0"
+              >
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArchiveRestore className="w-4 h-4" />}
+                Désarchiver
+              </button>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 mb-6 space-y-4">
+            <h2 className="text-lg font-bold text-slate-900">
+              {isEdit ? 'Éditer la série orale' : 'Nouvelle série orale'}
+            </h2>
+            <h3 className="text-base font-semibold text-slate-800">Informations</h3>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Titre</label>
+              <label htmlFor="voice-titre" className="block text-sm font-medium text-slate-700 mb-1">Titre</label>
+              <p className="text-xs text-slate-500 mb-1.5">Nom de la série affiché aux joueurs.</p>
               <input
+                id="voice-titre"
                 value={titre}
                 disabled={!canEdit}
                 onChange={(e) => setTitre(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 px-4 py-2.5"
+                placeholder="Ex. : Prononciation — salutations"
+                className="w-full rounded-xl border border-slate-300 px-4 py-2.5"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <label htmlFor="voice-description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <p className="text-xs text-slate-500 mb-1.5">Court résumé du contenu ou de l’objectif de la série.</p>
               <textarea
+                id="voice-description"
                 value={description}
                 disabled={!canEdit}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
+                placeholder="Ex. : Série pour s’entraîner aux formules de politesse."
                 className="w-full rounded-xl border border-gray-300 px-4 py-2.5"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Langue</label>
+                <label htmlFor="voice-langue" className="block text-sm font-medium text-gray-700 mb-1">Langue</label>
+                <p className="text-xs text-slate-500 mb-1.5">Langue attendue pour la reconnaissance vocale.</p>
                 <select
+                  id="voice-langue"
                   value={langue}
                   disabled={!canEdit}
                   onChange={(e) => setLangue(e.target.value)}
@@ -211,8 +261,10 @@ export default function VoiceSeriesEditor() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Difficulté (1-10)</label>
+                <label htmlFor="voice-difficulte" className="block text-sm font-medium text-gray-700 mb-1">Difficulté (1-10)</label>
+                <p className="text-xs text-slate-500 mb-1.5">Niveau global de la série (1 = facile, 10 = difficile).</p>
                 <input
+                  id="voice-difficulte"
                   type="number"
                   min={1}
                   max={10}
@@ -240,8 +292,12 @@ export default function VoiceSeriesEditor() {
               )}
             </div>
 
+            <p className="text-sm text-slate-500">
+              Chaque consigne est un exercice oral que le joueur devra réaliser dans la série.
+            </p>
+
             {prompts.map((row, index) => (
-              <div key={row.id ?? `draft-${index}`} className="rounded-xl border border-gray-200 p-4 space-y-3">
+              <div key={row.id ?? `draft-${index}`} className="rounded-xl border border-gray-200 p-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <p className="font-semibold text-gray-800">Consigne {index + 1}</p>
                   {canEdit && (
@@ -250,53 +306,92 @@ export default function VoiceSeriesEditor() {
                     </button>
                   )}
                 </div>
-                <textarea
-                  value={row.texteReference}
-                  disabled={!canEdit}
-                  onChange={(e) => updatePrompt(index, { texteReference: e.target.value })}
-                  rows={3}
-                  placeholder="Texte que le joueur devra lire à voix haute…"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5"
-                />
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <select
-                    value={row.sousType}
+
+                <div>
+                  <label htmlFor={`voice-prompt-${index}-texte`} className="block text-sm font-medium text-slate-700 mb-1">Texte à lire</label>
+                  <p className="text-xs text-slate-500 mb-1.5">
+                    Phrase ou texte que le joueur doit prononcer à voix haute.
+                  </p>
+                  <textarea
+                    id={`voice-prompt-${index}-texte`}
+                    value={row.texteReference}
                     disabled={!canEdit}
-                    onChange={(e) => updatePrompt(index, { sousType: e.target.value as VoicePromptSubtype })}
-                    className="rounded-xl border border-gray-300 px-3 py-2"
-                  >
-                    {VOICE_SUBTYPE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={row.tolerance}
-                    disabled={!canEdit}
-                    onChange={(e) => updatePrompt(index, { tolerance: e.target.value as VoiceTolerance })}
-                    className="rounded-xl border border-gray-300 px-3 py-2"
-                  >
-                    {VOICE_TOLERANCE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={5}
-                    max={60}
-                    value={row.dureeMaxSecondes}
-                    disabled={!canEdit}
-                    onChange={(e) => updatePrompt(index, { dureeMaxSecondes: Number(e.target.value) })}
-                    className="rounded-xl border border-gray-300 px-3 py-2"
-                    placeholder="Durée max (s)"
+                    onChange={(e) => updatePrompt(index, { texteReference: e.target.value })}
+                    rows={3}
+                    placeholder="Ex. : Bonjour, je m’appelle Léa."
+                    className="w-full rounded-xl border border-gray-300 px-4 py-2.5"
                   />
                 </div>
-                <input
-                  value={row.indice}
-                  disabled={!canEdit}
-                  onChange={(e) => updatePrompt(index, { indice: e.target.value })}
-                  placeholder="Indice optionnel"
-                  className="w-full rounded-xl border border-gray-300 px-4 py-2.5"
-                />
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label htmlFor={`voice-prompt-${index}-sousType`} className="block text-sm font-medium text-slate-700 mb-1">Type d’exercice</label>
+                    <p className="text-xs text-slate-500 mb-1.5">
+                      Lecture à l’écran, ou écoute d’une voix modèle puis répétition.
+                    </p>
+                    <select
+                      id={`voice-prompt-${index}-sousType`}
+                      value={row.sousType}
+                      disabled={!canEdit}
+                      onChange={(e) => updatePrompt(index, { sousType: e.target.value as VoicePromptSubtype })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2"
+                    >
+                      {VOICE_SUBTYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`voice-prompt-${index}-tolerance`} className="block text-sm font-medium text-slate-700 mb-1">Tolérance de notation</label>
+                    <p className="text-xs text-slate-500 mb-1.5">
+                      Niveau d’exigence pour valider la prononciation.
+                    </p>
+                    <select
+                      id={`voice-prompt-${index}-tolerance`}
+                      value={row.tolerance}
+                      disabled={!canEdit}
+                      onChange={(e) => updatePrompt(index, { tolerance: e.target.value as VoiceTolerance })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2"
+                    >
+                      {VOICE_TOLERANCE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label} — {opt.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor={`voice-prompt-${index}-duree`} className="block text-sm font-medium text-slate-700 mb-1">Durée max (secondes)</label>
+                    <p className="text-xs text-slate-500 mb-1.5">
+                      Temps imparti au joueur pour enregistrer (5 à 60 s).
+                    </p>
+                    <input
+                      id={`voice-prompt-${index}-duree`}
+                      type="number"
+                      min={5}
+                      max={60}
+                      value={row.dureeMaxSecondes}
+                      disabled={!canEdit}
+                      onChange={(e) => updatePrompt(index, { dureeMaxSecondes: Number(e.target.value) })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor={`voice-prompt-${index}-indice`} className="block text-sm font-medium text-slate-700 mb-1">Indice (optionnel)</label>
+                  <p className="text-xs text-slate-500 mb-1.5">
+                    Aide affichée au joueur s’il a besoin d’un coup de pouce.
+                  </p>
+                  <input
+                    id={`voice-prompt-${index}-indice`}
+                    value={row.indice}
+                    disabled={!canEdit}
+                    onChange={(e) => updatePrompt(index, { indice: e.target.value })}
+                    placeholder="Ex. : Articule bien les voyelles."
+                    className="w-full rounded-xl border border-gray-300 px-4 py-2.5"
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -307,7 +402,7 @@ export default function VoiceSeriesEditor() {
                 type="button"
                 disabled={saving}
                 onClick={() => void saveSeries()}
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-500 disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-sky-600 text-white font-semibold hover:bg-sky-500 disabled:opacity-50"
               >
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Enregistrer la série

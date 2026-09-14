@@ -321,7 +321,7 @@ export default function PlayerDetail() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-900">Contact</h3>
-                    <p className="text-xs text-gray-500">Email et téléphone</p>
+                    <p className="text-xs text-gray-500">E-mail et téléphone</p>
                   </div>
                 </div>
               </div>
@@ -329,7 +329,7 @@ export default function PlayerDetail() {
                 <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80">
                   <Mail className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Email</p>
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">E-mail</p>
                     <p className="text-gray-900 font-medium break-all">{user.email}</p>
                   </div>
                 </div>
@@ -408,8 +408,9 @@ export default function PlayerDetail() {
               </div>
               <div className="p-5 flex flex-col sm:flex-row sm:items-end gap-4">
                 <div className="flex-1 min-w-0">
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Parent</label>
+                  <label htmlFor="player-parent" className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Parent</label>
                   <select
+                    id="player-parent"
                     value={selectedParentId}
                     onChange={(e) => setSelectedParentId(e.target.value)}
                     className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm"

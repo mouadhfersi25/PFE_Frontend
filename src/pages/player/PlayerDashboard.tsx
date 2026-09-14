@@ -24,15 +24,24 @@ import { launchPlayerGame } from './utils/launchPlayerGame';
 export default function PlayerDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const highlightGameId = (location.state as { highlightGameId?: number } | null)?.highlightGameId;
+  const locationState = location.state as { highlightGameId?: number; fromOnboarding?: boolean } | null;
+  const highlightGameId = locationState?.highlightGameId;
+  const fromOnboarding = locationState?.fromOnboarding === true;
   const { playerProfile } = useAuth();
-  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState<boolean | null>(
+    fromOnboarding || playerProfile?.onboardingCompleted === true ? false : null
+  );
   const [availableGames, setAvailableGames] = useState<GameDTO[]>([]);
   const [gamesLoading, setGamesLoading] = useState(true);
   const [selectedGameType, setSelectedGameType] = useState<'ALL' | 'QUIZ' | 'MEMOIRE' | 'LOGIQUE' | 'REFLEXE'>('ALL');
   const [showStreakDetails, setShowStreakDetails] = useState(false);
 
   useEffect(() => {
+    // Évite de renvoyer vers l'onboarding juste après l'avoir terminé
+    if (fromOnboarding || playerProfile?.onboardingCompleted === true) {
+      setNeedsOnboarding(false);
+      return;
+    }
     userApi
       .getMe()
       .then((res) => {
@@ -42,7 +51,7 @@ export default function PlayerDashboard() {
         setNeedsOnboarding(incomplete);
       })
       .catch(() => setNeedsOnboarding(false));
-  }, []);
+  }, [fromOnboarding, playerProfile?.onboardingCompleted]);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +139,16 @@ export default function PlayerDashboard() {
     return () => window.clearTimeout(timer);
   }, [highlightGameId, gamesLoading, dashboardGamesPreview]);
 
-  if (!playerProfile) return null;
+  if (!playerProfile) {
+    return (
+      <div className="min-h-screen bg-[#090f2b] text-white flex items-center justify-center">
+        <div className="text-center text-slate-300">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          Chargement du tableau de bord…
+        </div>
+      </div>
+    );
+  }
 
   const niveau = playerProfile.niveau ?? playerProfile.level;
   const pointsExperience = playerProfile.pointsExperience ?? playerProfile.xp;
@@ -139,7 +157,7 @@ export default function PlayerDashboard() {
   const currentStreakDays = playerProfile.currentStreakDays ?? playerProfile.currentStreak ?? 0;
   const bestStreakDays = playerProfile.bestStreakDays ?? currentStreakDays;
 
-  const xpPercentage = (pointsExperience / xpToNextLevel) * 100;
+  const xpPercentage = xpToNextLevel > 0 ? (pointsExperience / xpToNextLevel) * 100 : 0;
   const safeXpPercentage = Math.max(0, Math.min(100, xpPercentage));
   const xpRemaining = Math.max(0, xpToNextLevel - pointsExperience);
   const avatarValue = (playerProfile.avatar || '').trim();
@@ -177,14 +195,13 @@ export default function PlayerDashboard() {
     return 'reflex';
   };
 
-  const difficultyLabel = (d: number | null | undefined) => {
-    const value = d ?? 5;
-    if (value <= 3) return 'Facile';
-    if (value <= 6) return 'Moyen';
-    return 'Difficile';
+  const difficultyLabel = (d: GameDTO['difficulte']) => {
+    if (d === 'FACILE') return 'Facile';
+    if (d === 'DIFFICILE') return 'Difficile';
+    return 'Moyen';
   };
 
-  const difficultyClass = (d: number | null | undefined) => {
+  const difficultyClass = (d: GameDTO['difficulte']) => {
     const label = difficultyLabel(d);
     if (label === 'Facile') return 'bg-emerald-500/20 text-emerald-200 border-emerald-300/40';
     if (label === 'Moyen') return 'bg-amber-500/20 text-amber-200 border-amber-300/40';
@@ -261,9 +278,8 @@ export default function PlayerDashboard() {
       difficulty: difficultyLabel(g.difficulte) === 'Facile' ? 'Easy' : difficultyLabel(g.difficulte) === 'Moyen' ? 'Medium' : 'Hard',
       estimatedTime: `${g.dureeMinutes ?? 10} min`,
       durationMinutes: g.dureeMinutes ?? 10,
-      quizPlayMode: g.quizPlayMode ?? 'CLASSIC',
       quizVariant: g.quizVariant ?? 'DEFAULT',
-      icon: g.icone || '🎮',
+      icon: '🎮',
     };
 
     await launchPlayerGame({
@@ -351,13 +367,13 @@ export default function PlayerDashboard() {
                   onClick={() => setShowStreakDetails(true)}
                   className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left transition-all hover:border-amber-300/60 hover:bg-white/15"
                 >
-                  <p className="text-xs text-indigo-100/80 mb-1">Streak</p>
+                  <p className="text-xs text-indigo-100/80 mb-1">Série</p>
                   <p className="text-2xl font-black text-white inline-flex items-center gap-2">
                     {currentStreakDays}
                     <span
                       className="text-2xl leading-none drop-shadow-[0_0_10px_rgba(251,146,60,0.9)] animate-pulse"
                       role="img"
-                      aria-label="Streak en feu"
+                      aria-label="Série en feu"
                     >
                       🔥
                     </span>
@@ -389,7 +405,7 @@ export default function PlayerDashboard() {
             </div>
             <div className="mt-5">
               <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-slate-300">pointsExperience</span>
+                <span className="text-slate-300">XP</span>
                 <span className="font-bold text-indigo-100">{pointsExperience}/{xpToNextLevel}</span>
               </div>
               <div className="h-2 rounded-full bg-white/10 overflow-hidden">
@@ -400,12 +416,12 @@ export default function PlayerDashboard() {
               </p>
               <div className="mt-3 grid grid-cols-1 gap-2 text-xs">
                 <div className="rounded-lg border border-white/10 bg-white/5 px-2 py-1">
-                  <span className="text-slate-300">scoreTotal</span>
+                  <span className="text-slate-300">Score total</span>
                   <p className="font-bold text-white">{scoreTotal}</p>
                 </div>
               </div>
               <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-500/10 px-3 py-2">
-                <p className="text-[11px] uppercase tracking-wide text-amber-200/90">Record streak</p>
+                <p className="text-[11px] uppercase tracking-wide text-amber-200/90">Record de série</p>
                 <p className="mt-1 text-sm font-semibold text-amber-100">{bestStreakDays} jour(s)</p>
               </div>
             </div>
@@ -470,7 +486,7 @@ export default function PlayerDashboard() {
                               ? 'bg-violet-500/20 text-violet-200 border-violet-300/40'
                               : 'bg-cyan-500/20 text-cyan-200 border-cyan-300/40'
                           }`}>
-                            Mode: {g.modeJeu === 'EN_LIGNE' ? 'Solo en ligne · contre adversaires' : 'Solo'}
+                            Mode: {g.modeJeu === 'EN_LIGNE' ? 'Multijoueur · contre adversaires' : 'Solo'}
                           </span>
                           {g.typeJeu === 'QUIZ' && (
                             <PlayerQuizVariantChip variant={g.quizVariant ?? 'DEFAULT'} />
@@ -538,7 +554,7 @@ export default function PlayerDashboard() {
             <div className="w-14 h-14 bg-gradient-to-br from-slate-600 to-indigo-700 rounded-xl flex items-center justify-center mb-4">
               <Users className="w-7 h-7 text-white" />
             </div>
-            <h3 className="text-xl font-bold text-white mb-1">Solo en ligne</h3>
+            <h3 className="text-xl font-bold text-white mb-1">Multijoueur</h3>
             <p className="text-slate-300 mb-4">Affronte d’autres joueurs : chacun joue seul et le meilleur score gagne.</p>
             <span className="text-indigo-200 font-semibold inline-flex items-center gap-2"><Play className="w-4 h-4" /> Affronter des joueurs</span>
           </motion.div>
@@ -552,7 +568,7 @@ export default function PlayerDashboard() {
             <h3 className="text-lg font-bold text-white">Continue comme ca, {firstName} !</h3>
           </div>
           <p className="text-slate-300 text-sm">
-            Tu as une streak de {currentStreakDays} (record: {bestStreakDays}). Plus que {xpRemaining} XP pour atteindre le niveau {niveau + 1}.
+            Tu as une série de {currentStreakDays} (record : {bestStreakDays}). Plus que {xpRemaining} XP pour atteindre le niveau {niveau + 1}.
           </p>
         </div>
       </div>
@@ -561,7 +577,7 @@ export default function PlayerDashboard() {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <button
             type="button"
-            aria-label="Fermer le detail de streak"
+            aria-label="Fermer le détail de la série"
             onClick={() => setShowStreakDetails(false)}
             className="absolute inset-0"
           />
@@ -573,7 +589,7 @@ export default function PlayerDashboard() {
             <button
               type="button"
               onClick={() => setShowStreakDetails(false)}
-              aria-label="Fermer la fenetre streak"
+              aria-label="Fermer la fenêtre de série"
               className="absolute top-3 right-3 z-20 inline-flex h-10 min-w-[40px] items-center justify-center rounded-full border border-white/25 bg-white/15 px-3 text-sm font-semibold text-white shadow-md shadow-black/20 transition-all hover:bg-white/30 focus:outline-none focus:ring-2 focus:ring-amber-300/70"
             >
               ✕
@@ -582,7 +598,7 @@ export default function PlayerDashboard() {
             <div className="text-center">
               <div className="text-5xl mb-1 drop-shadow-[0_0_14px_rgba(251,146,60,0.9)]">🔥</div>
               <p className="text-5xl font-black text-amber-300 leading-none">{currentStreakDays}</p>
-              <p className="text-sm text-amber-100/90 mt-1">streak actuel</p>
+              <p className="text-sm text-amber-100/90 mt-1">série actuelle</p>
               <p className="text-xs text-indigo-100/80 mt-2">Derniere activite: {playerProfile.lastStreakDate ?? 'aujourd hui'}</p>
             </div>
 
@@ -601,13 +617,13 @@ export default function PlayerDashboard() {
                 </div>
               </div>
             ) : (
-              <p className="mt-6 text-center text-sm text-slate-300">Aucune streak pour le moment.</p>
+              <p className="mt-6 text-center text-sm text-slate-300">Aucune série pour le moment.</p>
             )}
 
             <p className="mt-5 text-center text-xs text-slate-300">
               {isStreakTimelineTruncated
-                ? `Affichage des ${maxVisibleStreakDays} derniers jours sur ${currentStreakDays} jours de streak.`
-                : `Affichage complet de ta streak (${currentStreakDays} jours).`}
+                ? `Affichage des ${maxVisibleStreakDays} derniers jours sur ${currentStreakDays} jours de série.`
+                : `Affichage complet de ta série (${currentStreakDays} jours).`}
             </p>
           </motion.div>
         </div>

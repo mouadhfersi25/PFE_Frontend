@@ -182,11 +182,12 @@ export default function AdminEditMyProfile() {
 
               <div className="border-t border-slate-200 pt-6 space-y-6">
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
+                  <label htmlFor="admin-email" className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
                     <Mail className="w-4 h-4 text-slate-500" />
-                    Email
+                    E-mail
                   </label>
                   <input
+                    id="admin-email"
                     type="email"
                     value={profile.email ?? ''}
                     readOnly
@@ -197,11 +198,12 @@ export default function AdminEditMyProfile() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
+                    <label htmlFor="admin-prenom" className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
                       <User className="w-4 h-4 text-slate-500" />
                       Prénom
                     </label>
                     <input
+                      id="admin-prenom"
                       type="text"
                       name="prenom"
                       value={form.prenom}
@@ -217,11 +219,12 @@ export default function AdminEditMyProfile() {
                     {errors.prenom && <p className="mt-1 text-sm text-red-600">{errors.prenom}</p>}
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
+                    <label htmlFor="admin-nom" className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
                       <User className="w-4 h-4 text-slate-500" />
                       Nom
                     </label>
                     <input
+                      id="admin-nom"
                       type="text"
                       name="nom"
                       value={form.nom}
@@ -239,11 +242,12 @@ export default function AdminEditMyProfile() {
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
+                  <label htmlFor="admin-telephone" className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
                     <Phone className="w-4 h-4 text-slate-500" />
                     Téléphone *
                   </label>
                   <input
+                    id="admin-telephone"
                     type="text"
                     name="telephone"
                     value={form.telephone}

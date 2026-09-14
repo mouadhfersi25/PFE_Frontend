@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { HelpCircle, Gamepad2, Target, TrendingUp, BarChart3 } from 'lucide-react';
+import { HelpCircle, Gamepad2, Target, TrendingUp, BarChart3, ArrowRight } from 'lucide-react';
 import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
 import educatorApi from '@/api/educator/educator.api';
@@ -18,6 +18,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
+import { difficultyFr, gameTypeFr, difficultyColor } from '@/utils/frLabels';
 
 const EMPTY_LEARNING: EducatorLearningStatsDTO = {
   avgSuccessRate: 0,
@@ -63,9 +64,9 @@ export default function EducatorDashboard() {
     assignedGames: 0,
     avgSuccessRate: 0,
     difficultyDistribution: [
-      { name: 'Easy', value: 0, color: '#10b981' },
-      { name: 'Medium', value: 0, color: '#f59e0b' },
-      { name: 'Hard', value: 0, color: '#ef4444' },
+      { name: 'Easy', value: 0, color: '#93c5fd' },
+      { name: 'Medium', value: 0, color: '#3b82f6' },
+      { name: 'Hard', value: 0, color: '#1e40af' },
     ],
   };
 
@@ -73,124 +74,146 @@ export default function EducatorDashboard() {
     {
       label: 'Questions créées',
       value: educatorStats.totalQuestionsCreated,
-      icon: <HelpCircle className="w-6 h-6" />,
-      color: 'from-green-500 to-teal-500',
+      icon: <HelpCircle className="w-5 h-5" />,
+      iconWrap: 'bg-slate-100 text-slate-700',
+      rail: 'bg-slate-400',
     },
     {
       label: 'Jeux configurés',
       value: educatorStats.assignedGames,
-      icon: <Gamepad2 className="w-6 h-6" />,
-      color: 'from-blue-500 to-cyan-500',
+      icon: <Gamepad2 className="w-5 h-5" />,
+      iconWrap: 'bg-blue-50 text-blue-700',
+      rail: 'bg-blue-500',
     },
     {
       label: 'Taux de réussite moyen',
       value: `${educatorStats.avgSuccessRate}%`,
-      icon: <Target className="w-6 h-6" />,
-      color: 'from-purple-500 to-pink-500',
+      icon: <Target className="w-5 h-5" />,
+      iconWrap: 'bg-emerald-50 text-emerald-700',
+      rail: 'bg-emerald-500',
     },
     {
       label: 'Sessions jouées',
       value: totalSessionsPlayed,
-      icon: <BarChart3 className="w-6 h-6" />,
-      color: 'from-yellow-500 to-orange-500',
+      icon: <BarChart3 className="w-5 h-5" />,
+      iconWrap: 'bg-amber-50 text-amber-700',
+      rail: 'bg-amber-500',
     },
   ];
 
   const gameTypeChartData = learningStats.sessionsByGameType.map((row) => ({
-    label: row.label,
+    label: gameTypeFr(row.label) || row.label,
     sessions: row.sessions,
     avgSuccessRate: row.avgSuccessRate,
     color: row.color,
   }));
   const hasGameTypeSessions = gameTypeChartData.some((row) => row.sessions > 0);
 
-  const difficultyData = educatorStats.difficultyDistribution.map((d) => ({
-    name: d.name,
-    value: d.value,
-    color: d.color,
-  }));
+  const difficultyData = educatorStats.difficultyDistribution.map((d) => {
+    const name = difficultyFr(d.name) || d.name;
+    return {
+      name,
+      value: d.value,
+      color: difficultyColor(d.name) || difficultyColor(name),
+    };
+  });
   const difficultyTotal = difficultyData.reduce((sum, d) => sum + d.value, 0);
   const difficultyPieData = difficultyData.filter((d) => d.value > 0);
   const difficultyPercent = (value: number) =>
     difficultyTotal > 0 ? Math.round((100 * value) / difficultyTotal) : 0;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-slate-100">
       <EducatorSidebar />
       <EducatorHeader />
-      
+
       <div className="flex-1 overflow-auto">
         <div
-          className="p-5 md:p-8 bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 min-h-full"
+          className="p-5 md:p-8 bg-gradient-to-b from-slate-100 via-slate-50 to-white min-h-full"
           style={{ paddingTop: '110px' }}
         >
-          {/* Header */}
-          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white/70 p-4 md:p-5 mb-8 shadow-sm">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-700 mb-3 border border-slate-200">
-              <Target className="w-4 h-4 text-emerald-600" />
-              Educator Dashboard
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 md:p-7 mb-8 shadow-sm">
+            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-slate-100 blur-3xl" />
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 mb-3 border border-slate-200">
+                <TrendingUp className="w-3.5 h-3.5 text-slate-500" />
+                Vue d’ensemble
+              </div>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-1.5">
+                Tableau de bord éducateur
+              </h1>
+              <p className="text-sm md:text-base text-slate-500 max-w-2xl">
+                Suivez vos contenus, la réussite des élèves et lancez rapidement de nouveaux jeux.
+              </p>
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">Educator Dashboard</h1>
           </div>
 
-          {/* Stats Grid - synchronisé BDD */}
           {loading && (
-            <p className="text-sm text-gray-500 mb-4">Chargement des statistiques…</p>
+            <p className="text-sm text-slate-500 mb-4">Chargement des statistiques…</p>
           )}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
             {stats.map((stat, index) => (
               <motion.div
                 key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
+                transition={{ delay: index * 0.06 }}
+                className="relative bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-md transition-shadow"
               >
+                <div className={`absolute inset-x-0 top-0 h-1 rounded-t-2xl ${stat.rail}`} />
                 <div className="flex items-center justify-between mb-4">
-                  <div className={`w-12 h-12 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center text-white`}>
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.iconWrap}`}>
                     {stat.icon}
                   </div>
-                  <TrendingUp className="w-5 h-5 text-green-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-1">{stat.value}</h3>
-                <p className="text-sm text-gray-600">{stat.label}</p>
+                <h3 className="text-2xl font-extrabold text-slate-900 mb-1">{stat.value}</h3>
+                <p className="text-sm text-slate-500 font-medium">{stat.label}</p>
               </motion.div>
             ))}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            {/* Activité par type de jeu — BDD: sessions_jeu + jeux.type_jeu */}
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200"
             >
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-bold text-gray-900">Activité par type de jeu</h2>
-                <BarChart3 className="w-5 h-5 text-emerald-600" />
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Activité par type de jeu</h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Sessions terminées et taux de réussite moyen.
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200">
+                  <BarChart3 className="w-5 h-5 text-slate-600" />
+                </div>
               </div>
-              <p className="text-xs text-gray-500 mb-4">
-                Sessions terminées et taux de réussite moyen par catégorie.
-              </p>
               {!hasGameTypeSessions && !loading ? (
-                <p className="text-sm text-gray-500 py-16 text-center">
+                <p className="text-sm text-slate-500 py-16 text-center">
                   Aucune session terminée pour le moment.
                 </p>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={gameTypeChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="label" stroke="#666" fontSize={11} />
-                    <YAxis yAxisId="left" stroke="#666" fontSize={11} allowDecimals={false} width={36} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="label" stroke="#64748b" fontSize={11} />
+                    <YAxis yAxisId="left" stroke="#64748b" fontSize={11} allowDecimals={false} width={36} />
                     <YAxis
                       yAxisId="right"
                       orientation="right"
-                      stroke="#666"
+                      stroke="#64748b"
                       fontSize={11}
                       domain={[0, 100]}
                       width={36}
                     />
                     <Tooltip
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 8px 24px rgba(15,23,42,0.06)',
+                      }}
                       formatter={(value: number, name: string) =>
                         name === 'avgSuccessRate'
                           ? [`${value}%`, 'Réussite']
@@ -198,35 +221,29 @@ export default function EducatorDashboard() {
                       }
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar
-                      yAxisId="left"
-                      dataKey="sessions"
-                      name="Sessions"
-                      radius={[6, 6, 0, 0]}
-                      fill="#6366f1"
-                    />
-                    <Bar
-                      yAxisId="right"
-                      dataKey="avgSuccessRate"
-                      name="Réussite"
-                      radius={[6, 6, 0, 0]}
-                      fill="#10b981"
-                    />
+                    <Bar yAxisId="left" dataKey="sessions" name="Sessions" radius={[6, 6, 0, 0]} fill="#475569" />
+                    <Bar yAxisId="right" dataKey="avgSuccessRate" name="Réussite" radius={[6, 6, 0, 0]} fill="#3b82f6" />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </motion.div>
 
-            {/* Difficulty Distribution — BDD: questions.difficulte (1=Easy, 2=Medium, 3=Hard) */}
             <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200"
             >
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Répartition par difficulté</h2>
-              <p className="text-xs text-gray-500 mb-6">Répartition des questions créées par niveau.</p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Répartition par difficulté</h2>
+                  <p className="text-xs text-slate-500 mt-1">Questions créées par niveau.</p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-100 border border-slate-200">
+                  <Target className="w-5 h-5 text-slate-600" />
+                </div>
+              </div>
               <div className="flex items-center justify-center">
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie
                       data={difficultyPieData}
@@ -235,7 +252,6 @@ export default function EducatorDashboard() {
                       labelLine={false}
                       label={false}
                       outerRadius={100}
-                      fill="#8884d8"
                       dataKey="value"
                     >
                       {difficultyPieData.map((entry, index) => (
@@ -243,6 +259,11 @@ export default function EducatorDashboard() {
                       ))}
                     </Pie>
                     <Tooltip
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 8px 24px rgba(15,23,42,0.06)',
+                      }}
                       formatter={(value: number, name: string) => [
                         `${value} (${difficultyPercent(value)}%)`,
                         name,
@@ -251,13 +272,13 @@ export default function EducatorDashboard() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-4">
+              <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-2">
                 {difficultyData.map((item) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                    <span className="text-sm text-gray-600">
+                  <div key={item.name} className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 border border-slate-200">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-sm text-slate-600">
                       {item.name}{' '}
-                      <span className="text-gray-400">
+                      <span className="text-slate-400">
                         — {item.value} ({difficultyPercent(item.value)}%)
                       </span>
                     </span>
@@ -267,31 +288,37 @@ export default function EducatorDashboard() {
             </motion.div>
           </div>
 
-          {/* Quick Actions */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-gradient-to-r from-green-500 to-teal-500 rounded-xl p-8 text-white"
+            className="rounded-2xl border border-slate-200 bg-slate-900 p-7 md:p-8 text-white shadow-sm"
           >
-            <h2 className="text-2xl font-bold mb-4">Ready to create?</h2>
-            <p className="mb-6 opacity-90">Start adding questions to enhance the learning experience</p>
-            <div className="flex gap-4">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => window.location.href = '/educator/games/manage'}
-                className="px-6 py-3 bg-white text-green-600 rounded-lg font-medium hover:shadow-lg transition-shadow"
-              >
-                Manage Games
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => window.location.href = '/educator/games/type/quiz'}
-                className="px-6 py-3 bg-white/20 text-white rounded-lg font-medium hover:bg-white/30 transition-colors border border-white/30"
-              >
-                Quiz Games
-              </motion.button>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div className="max-w-xl">
+                <h2 className="text-2xl font-bold mb-2">Prêt à créer ?</h2>
+                <p className="text-slate-300 text-sm md:text-base">
+                  Ajoutez des questions et enrichissez l&apos;expérience d&apos;apprentissage de vos élèves.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => { window.location.href = '/educator/games/manage'; }}
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-white text-slate-900 rounded-xl font-semibold hover:bg-slate-100 transition-colors"
+                >
+                  Gérer les jeux
+                  <ArrowRight className="w-4 h-4" />
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => { window.location.href = '/educator/games/type/quiz'; }}
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-500 transition-colors"
+                >
+                  Jeux quiz
+                </motion.button>
+              </div>
             </div>
           </motion.div>
         </div>

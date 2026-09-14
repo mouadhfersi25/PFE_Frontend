@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ArrowLeft, Save, Loader2, FileText, Sparkles, Upload, Trash2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, FileText, Sparkles, Upload, Trash2, PowerOff, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import educatorApi from '@/api/educator/educator.api';
-import type { GameDTO, TypeJeu, ModeJeu, QuizPlayMode, QuizVariant } from '@/api/types';
+import type { GameDTO, Difficulte, TypeJeu, ModeJeu, QuizVariant } from '@/api/types';
 import QuizVariantPicker, { QuizVariantBadge } from '@/components/educator/QuizVariantPicker';
 import EducatorSidebar from '@/components/educator/EducatorSidebar';
 import EducatorHeader from '@/components/educator/EducatorHeader';
@@ -17,14 +17,11 @@ import {
 } from '@/utils/formValidation';
 import { dataUrlToImageFile } from '@/utils/dataUrlToImageFile';
 
-const ICONS = ['🎮', '🧮', '🧠', '🎯', '⚡', '🔬', '🦁', '🌟', '🚀', '🎨'];
-
-const TYPE_ICONS: Record<string, string> = {
-  QUIZ: '🧮',
-  MEMOIRE: '🧠',
-  REFLEXE: '⚡',
-  LOGIQUE: '🎯',
-};
+const DIFFICULTY_OPTIONS: { value: Difficulte; label: string }[] = [
+  { value: 'FACILE', label: 'Facile' },
+  { value: 'MOYEN', label: 'Moyen' },
+  { value: 'DIFFICILE', label: 'Difficile' },
+];
 
 const getContentEditPath = (game: Pick<GameDTO, 'id' | 'typeJeu'>): string | null => {
   if (game.typeJeu === 'QUIZ') return `/educator/games/quiz/${game.id}/questions`;
@@ -32,12 +29,6 @@ const getContentEditPath = (game: Pick<GameDTO, 'id' | 'typeJeu'>): string | nul
   if (game.typeJeu === 'REFLEXE') return `/educator/games/reflex/${game.id}/configure`;
   if (game.typeJeu === 'LOGIQUE') return `/educator/games/logic/${game.id}/configure`;
   return null;
-};
-
-const DIFFICULTY_NUMBER_TO_LABEL: Record<number, string> = {
-  0: 'Easy', 1: 'Easy', 2: 'Easy', 3: 'Easy',
-  4: 'Medium', 5: 'Medium', 6: 'Medium',
-  7: 'Hard', 8: 'Hard', 9: 'Hard', 10: 'Hard',
 };
 
 export default function EducatorEditGame() {
@@ -62,18 +53,17 @@ export default function EducatorEditGame() {
     description: '',
     typeJeu: 'QUIZ' as TypeJeu,
     modeJeu: 'INDIVIDUEL' as ModeJeu,
-    difficulte: 5,
+    difficulte: 'MOYEN' as Difficulte,
     ageMin: 7,
     ageMax: 18,
     dureeMinutes: 15,
-    icone: '🎮',
     coverImageUrl: '',
     actif: true,
-    quizPlayMode: 'CLASSIC' as QuizPlayMode,
     quizVariant: 'DEFAULT' as QuizVariant,
   });
   const [previewCoverSrc, setPreviewCoverSrc] = useState('');
   const [coverLoading, setCoverLoading] = useState(false);
+  const [requestingReactivation, setRequestingReactivation] = useState(false);
 
   useEffect(() => {
     const url = formData.coverImageUrl?.trim();
@@ -108,14 +98,12 @@ export default function EducatorEditGame() {
             description: g.description ?? '',
             typeJeu: g.typeJeu ?? 'QUIZ',
             modeJeu: g.modeJeu ?? 'INDIVIDUEL',
-            difficulte: g.difficulte ?? 5,
+            difficulte: g.difficulte ?? 'MOYEN',
             ageMin: g.ageMin ?? 7,
             ageMax: g.ageMax ?? 18,
             dureeMinutes: g.dureeMinutes ?? 15,
-            icone: g.icone ?? TYPE_ICONS[g.typeJeu] ?? '🎮',
             coverImageUrl: g.coverImageUrl ?? '',
             actif: g.actif ?? true,
-            quizPlayMode: g.quizPlayMode ?? 'CLASSIC',
             quizVariant: g.quizVariant ?? 'DEFAULT',
           });
         }
@@ -125,9 +113,20 @@ export default function EducatorEditGame() {
     return () => { cancelled = true; };
   }, [id]);
 
+  // Un jeu ACCEPTE mais désactivé par l'admin (suite à signalement) reste modifiable le temps
+  // que l'éducateur corrige le contenu, tant qu'une demande de réactivation n'est pas déjà en cours.
+  const isCorrectingDeactivatedGame = (g: GameDTO) => g.etat === 'ACCEPTE' && !g.actif && !g.reactivationPending;
+
   useEffect(() => {
     if (!game || loading) return;
-    if (game.etat === 'EN_ATTENTE' || game.etat === 'ACCEPTE') {
+    if (isCorrectingDeactivatedGame(game)) return;
+    if (game.etat === 'EN_ATTENTE') {
+      toast.info('Ce jeu est finalisé : vous ne pouvez plus modifier ses informations.');
+      navigate('/educator/games/manage', { replace: true });
+    } else if (game.etat === 'ACCEPTE' && game.reactivationPending) {
+      toast.info('Une demande de réactivation est en attente de validation par l\'administration.');
+      navigate('/educator/games/manage', { replace: true });
+    } else if (game.etat === 'ACCEPTE') {
       toast.info('Ce jeu est finalisé : vous ne pouvez plus modifier ses informations.');
       navigate('/educator/games/manage', { replace: true });
     }
@@ -185,11 +184,10 @@ export default function EducatorEditGame() {
     const rules = [
       { field: 'titre', message: validateRequired(formData.titre, 'Titre du jeu requis') },
       { field: 'description', message: validateRequired(formData.description, 'La description est requise') ?? validateMaxLength(formData.description ?? '', 2000, 'Maximum 2000 caractères') },
-      { field: 'difficulte', message: validateInteger(formData.difficulte, 0, 10, 'Difficulté entre 0 et 10') },
+      { field: 'difficulte', message: validateRequired(formData.difficulte, 'La difficulté est requise') },
       { field: 'ageMin', message: validateInteger(formData.ageMin, 7, 18, 'Âge min entre 7 et 18') },
       { field: 'ageMax', message: ageMaxErr },
       { field: 'dureeMinutes', message: validateInteger(formData.dureeMinutes, 1, 999, 'Durée entre 1 et 999 minutes') },
-      { field: 'icone', message: validateRequired(formData.icone, 'Choisissez une icône') },
     ];
     const next = runValidations(rules);
     setErrors(next);
@@ -213,12 +211,10 @@ export default function EducatorEditGame() {
         ageMin: formData.ageMin,
         ageMax: formData.ageMax,
         dureeMinutes: formData.dureeMinutes,
-        icone: formData.icone || undefined,
         coverImageUrl: isDataUrlCover ? undefined : coverTrim || undefined,
         typeJeu: formData.typeJeu,
         modeJeu: formData.modeJeu,
         actif: formData.actif,
-        quizPlayMode: formData.typeJeu === 'QUIZ' ? formData.quizPlayMode : 'CLASSIC',
         quizVariant: formData.typeJeu === 'QUIZ' ? formData.quizVariant : 'DEFAULT',
       });
 
@@ -228,10 +224,10 @@ export default function EducatorEditGame() {
           if (file) {
             await educatorApi.uploadGameCover(Number(id), file);
           } else {
-            toast.warning('Jeu enregistré ; la nouvelle cover n’a pas pu être envoyée. Réessayez l’upload.');
+            toast.warning('Jeu enregistré ; la nouvelle image de couverture n’a pas pu être envoyée. Réessayez l’envoi.');
           }
         } catch {
-          toast.warning('Jeu enregistré ; échec de l’envoi de la cover. Réessayez l’upload.');
+          toast.warning('Jeu enregistré ; échec de l’envoi de l’image de couverture. Réessayez l’envoi.');
         }
       }
       toast.success('Jeu mis à jour.');
@@ -251,7 +247,7 @@ export default function EducatorEditGame() {
       <EducatorSidebar />
         <EducatorHeader />
       <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+        <Loader2 className="w-10 h-10 text-sky-500 animate-spin" />
       </div>
     </div>
   );
@@ -262,7 +258,7 @@ export default function EducatorEditGame() {
         <EducatorHeader />
       <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
         <p className="text-gray-600">{error}</p>
-        <button onClick={() => navigate('/educator/games/manage')} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600">
+        <button onClick={() => navigate('/educator/games/manage')} className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600">
           <ArrowLeft className="w-4 h-4" />Retour à la liste
         </button>
       </div>
@@ -271,20 +267,24 @@ export default function EducatorEditGame() {
 
   if (!game) return null;
 
-  if (game.etat === 'EN_ATTENTE' || game.etat === 'ACCEPTE') {
+  if ((game.etat === 'EN_ATTENTE' || game.etat === 'ACCEPTE') && !isCorrectingDeactivatedGame(game)) {
     return (
       <div className="flex min-h-screen bg-gray-50">
         <EducatorSidebar />
         <EducatorHeader />
         <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8">
-          <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
-          <p className="text-gray-600 text-sm">Ce jeu est finalisé. Redirection…</p>
+          <Loader2 className="w-10 h-10 text-sky-500 animate-spin" />
+          <p className="text-gray-600 text-sm">
+            {game.reactivationPending
+              ? 'Demande de réactivation en attente de validation. Redirection…'
+              : 'Ce jeu est finalisé. Redirection…'}
+          </p>
         </div>
       </div>
     );
   }
 
-  const inputClass = "w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all text-gray-900 placeholder:text-gray-400";
+  const inputClass = "w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-gray-900 placeholder:text-gray-400";
   const labelClass = "block text-sm font-semibold text-gray-700 mb-1.5";
   const contentEditPath = getContentEditPath(game);
 
@@ -297,11 +297,11 @@ export default function EducatorEditGame() {
       setFormData((prev) => ({ ...prev, coverImageUrl: next }));
       setPreviewCoverSrc(next);
       setCoverLoading(false);
-      toast.success('Cover générée (image intégrée au jeu)');
+      toast.success('Image de couverture générée (intégrée au jeu)');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         || (err as Error)?.message
-        || 'Erreur lors de la génération de cover.';
+        || 'Erreur lors de la génération de l’image de couverture.';
       toast.error(msg);
     } finally {
       setGeneratingCover(false);
@@ -315,11 +315,11 @@ export default function EducatorEditGame() {
       const res = await educatorApi.uploadGameCover(Number(id), file);
       const next = res.data?.coverImageUrl ?? '';
       setFormData((prev) => ({ ...prev, coverImageUrl: next }));
-      toast.success('Cover importée avec succès');
+      toast.success('Image de couverture importée avec succès');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         || (err as Error)?.message
-        || "Erreur lors de l'import de la cover.";
+        || "Erreur lors de l'import de l’image de couverture.";
       toast.error(msg);
     } finally {
       setUploadingCover(false);
@@ -331,14 +331,33 @@ export default function EducatorEditGame() {
     try {
       const res = await educatorApi.deleteGameCover(Number(id));
       setFormData((prev) => ({ ...prev, coverImageUrl: res.data?.coverImageUrl ?? '' }));
-      toast.success('Cover supprimée');
+      toast.success('Image de couverture supprimée');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
         || (err as Error)?.message
-        || 'Erreur lors de la suppression de la cover.';
+        || 'Erreur lors de la suppression de l’image de couverture.';
       toast.error(msg);
     }
   };
+
+  const handleRequestReactivation = async () => {
+    if (!id) return;
+    setRequestingReactivation(true);
+    try {
+      const res = await educatorApi.requestReactivation(Number(id));
+      toast.success('Demande de réactivation envoyée à l\'administration.');
+      setGame(res.data);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        || (err as Error)?.message
+        || 'Erreur lors de la demande de réactivation.';
+      toast.error(msg);
+    } finally {
+      setRequestingReactivation(false);
+    }
+  };
+
+  const correctingDeactivatedGame = isCorrectingDeactivatedGame(game);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -351,7 +370,7 @@ export default function EducatorEditGame() {
               <button
                 type="button"
                 onClick={() => navigate('/educator/games/manage')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-semibold shadow-sm hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-gray-200 bg-white text-gray-700 font-semibold shadow-sm hover:bg-gray-50 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-1 transition-all"
               >
                 <ArrowLeft className="w-4 h-4 shrink-0" />
                 Retour à la liste des jeux
@@ -359,12 +378,56 @@ export default function EducatorEditGame() {
             </div>
           </div>
 
-          <div className="h-28 rounded-2xl bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-500 flex items-end p-6 mb-8 shadow-lg">
+          <div className="h-28 rounded-2xl bg-gradient-to-br from-sky-500 via-blue-500 to-indigo-500 flex items-end p-6 mb-8 shadow-lg">
             <div>
               <h1 className="text-2xl font-bold text-white drop-shadow-sm">Modifier le jeu</h1>
               <p className="text-white/90 text-sm mt-0.5">{game.titre}</p>
             </div>
           </div>
+
+          {correctingDeactivatedGame && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-5 mb-6">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                  <PowerOff className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-rose-900">Jeu désactivé — en attente de correction</p>
+                  <p className="text-sm text-rose-800 mt-1">
+                    Ce jeu a été désactivé par l'administration suite à un signalement. Corrigez le
+                    contenu ci-dessous, puis demandez sa réactivation.
+                  </p>
+                  {game.latestDeactivationReason && (
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-100/70 p-3">
+                      <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                      <p className="text-sm text-rose-900">
+                        <span className="font-semibold">Détails de la désactivation — </span>
+                        {game.latestDeactivationReason}
+                      </p>
+                    </div>
+                  )}
+                  {game.latestReactivationRejectionReason && (
+                    <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-900">
+                        <span className="font-semibold">Précédente demande de réactivation refusée — </span>
+                        {game.latestReactivationRejectionReason}
+                      </p>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleRequestReactivation()}
+                    disabled={requestingReactivation}
+                    className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 text-white font-semibold shadow-sm hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    {requestingReactivation ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                    {requestingReactivation ? 'Envoi...' : 'Finaliser et demander la réactivation'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -403,15 +466,15 @@ export default function EducatorEditGame() {
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Infos générales</h2>
                 <div className="space-y-5">
                   <div>
-                    <label className={labelClass}>Titre du jeu *</label>
-                    <input type="text" value={formData.titre}
+                    <label htmlFor="edu-game-titre" className={labelClass}>Titre du jeu *</label>
+                    <input id="edu-game-titre" type="text" value={formData.titre}
                       onChange={(e) => { setFormData({ ...formData, titre: e.target.value }); setErrors((p) => ({ ...p, titre: '' })); }}
                       className={`${inputClass} ${errors.titre ? 'border-red-500' : ''}`} placeholder="ex. Quiz Math" />
                     {errors.titre && <p className="mt-1 text-sm text-red-600">{errors.titre}</p>}
                   </div>
                   <div>
-                    <label className={labelClass}>Description *</label>
-                    <textarea value={formData.description}
+                    <label htmlFor="edu-game-description" className={labelClass}>Description *</label>
+                    <textarea id="edu-game-description" value={formData.description}
                       onChange={(e) => { setFormData({ ...formData, description: e.target.value }); setErrors((p) => ({ ...p, description: '' })); }}
                       className={`${inputClass} min-h-[120px] resize-y ${errors.description ? 'border-red-500' : ''}`}
                       placeholder="Décrivez le jeu pour les joueurs..." rows={4} />
@@ -424,60 +487,51 @@ export default function EducatorEditGame() {
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Type & paramètres</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-5">
                   <div>
-                    <label className={labelClass}>Type de jeu *</label>
-                    <select value={formData.typeJeu} onChange={(e) => setFormData({ ...formData, typeJeu: e.target.value as TypeJeu })} className={inputClass}>
+                    <label htmlFor="edu-game-typeJeu" className={labelClass}>Type de jeu *</label>
+                    <select id="edu-game-typeJeu" value={formData.typeJeu} onChange={(e) => setFormData({ ...formData, typeJeu: e.target.value as TypeJeu })} className={inputClass}>
                       <option value="QUIZ">Quiz</option>
-                      <option value="MEMOIRE">Memory</option>
+                      <option value="MEMOIRE">Mémoire</option>
                       <option value="LOGIQUE">Logique</option>
-                      <option value="REFLEXE">Reflex</option>
+                      <option value="REFLEXE">Réflexe</option>
                     </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Mode de jeu *</label>
-                    <select value={formData.modeJeu} onChange={(e) => setFormData({ ...formData, modeJeu: e.target.value as ModeJeu })} className={inputClass}>
+                    <label htmlFor="edu-game-modeJeu" className={labelClass}>Mode de jeu *</label>
+                    <select id="edu-game-modeJeu" value={formData.modeJeu} onChange={(e) => setFormData({ ...formData, modeJeu: e.target.value as ModeJeu })} className={inputClass}>
                       <option value="INDIVIDUEL">Individuel</option>
-                      <option value="EN_LIGNE">En ligne · chacun pour soi</option>
+                      <option value="EN_LIGNE">Multijoueur · chacun pour soi</option>
                     </select>
                   </div>
-                  {formData.typeJeu === 'QUIZ' && (
-                    <div>
-                      <label className={labelClass}>Mode de partie</label>
-                      <select
-                        value={formData.quizPlayMode}
-                        onChange={(e) => setFormData({ ...formData, quizPlayMode: e.target.value as QuizPlayMode })}
-                        className={inputClass}
-                      >
-                        <option value="CLASSIC">Classique</option>
-                        <option value="BLITZ_60S">Blitz 60 secondes</option>
-                      </select>
-                    </div>
-                  )}
                   <div>
-                    <label className={labelClass}>Difficulté (0–10) *</label>
-                    <input type="number" value={formData.difficulte}
-                      onChange={(e) => { setFormData({ ...formData, difficulte: parseInt(e.target.value, 10) || 0 }); setErrors((p) => ({ ...p, difficulte: '' })); }}
-                      className={`${inputClass} ${errors.difficulte ? 'border-red-500' : ''}`} />
+                    <label htmlFor="edu-game-difficulte" className={labelClass}>Difficulté *</label>
+                    <select id="edu-game-difficulte" value={formData.difficulte}
+                      onChange={(e) => { setFormData({ ...formData, difficulte: e.target.value as Difficulte }); setErrors((p) => ({ ...p, difficulte: '' })); }}
+                      className={`${inputClass} ${errors.difficulte ? 'border-red-500' : ''}`}>
+                      {DIFFICULTY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                     {errors.difficulte && <p className="mt-1 text-sm text-red-600">{errors.difficulte}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
                   <div>
-                    <label className={labelClass}>Âge min * (7–18)</label>
-                    <input type="number" value={formData.ageMin}
+                    <label htmlFor="edu-game-ageMin" className={labelClass}>Âge min * (7–18)</label>
+                    <input id="edu-game-ageMin" type="number" value={formData.ageMin}
                       onChange={(e) => { setFormData({ ...formData, ageMin: parseInt(e.target.value, 10) || 0 }); setErrors((p) => ({ ...p, ageMin: '', ageMax: '' })); }}
                       className={`${inputClass} ${errors.ageMin ? 'border-red-500' : ''}`} />
                     {errors.ageMin && <p className="mt-1 text-sm text-red-600">{errors.ageMin}</p>}
                   </div>
                   <div>
-                    <label className={labelClass}>Âge max * (7–18)</label>
-                    <input type="number" value={formData.ageMax}
+                    <label htmlFor="edu-game-ageMax" className={labelClass}>Âge max * (7–18)</label>
+                    <input id="edu-game-ageMax" type="number" value={formData.ageMax}
                       onChange={(e) => { setFormData({ ...formData, ageMax: parseInt(e.target.value, 10) || 0 }); setErrors((p) => ({ ...p, ageMax: '' })); }}
                       className={`${inputClass} ${errors.ageMax ? 'border-red-500' : ''}`} />
                     {errors.ageMax && <p className="mt-1 text-sm text-red-600">{errors.ageMax}</p>}
                   </div>
                   <div>
-                    <label className={labelClass}>Durée (minutes) *</label>
-                    <input type="number" value={formData.dureeMinutes}
+                    <label htmlFor="edu-game-dureeMinutes" className={labelClass}>Durée (minutes) *</label>
+                    <input id="edu-game-dureeMinutes" type="number" value={formData.dureeMinutes}
                       onChange={(e) => { setFormData({ ...formData, dureeMinutes: parseInt(e.target.value, 10) || 1 }); setErrors((p) => ({ ...p, dureeMinutes: '' })); }}
                       className={`${inputClass} ${errors.dureeMinutes ? 'border-red-500' : ''}`} placeholder="ex. 15" />
                     {errors.dureeMinutes && <p className="mt-1 text-sm text-red-600">{errors.dureeMinutes}</p>}
@@ -495,22 +549,9 @@ export default function EducatorEditGame() {
                 )}
               </section>
 
-              <section className="mb-8">
-                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Icône du jeu *</h2>
-                <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                  {ICONS.map((icon) => (
-                    <button key={icon} type="button"
-                      onClick={() => { setFormData({ ...formData, icone: icon }); setErrors((p) => ({ ...p, icone: '' })); }}
-                      className={`w-12 h-12 flex items-center justify-center text-2xl rounded-xl border-2 transition-all ${formData.icone === icon ? 'border-emerald-500 bg-emerald-50 scale-105' : 'border-gray-200 hover:border-gray-300'}`}>
-                      {icon}
-                    </button>
-                  ))}
-                </div>
-                {errors.icone && <p className="mt-2 text-sm text-red-600">{errors.icone}</p>}
-              </section>
 
               <section className="mb-8">
-                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Cover image</h2>
+                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Image de couverture</h2>
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <button
@@ -522,9 +563,9 @@ export default function EducatorEditGame() {
                       {generatingCover ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                       Régénérer IA
                     </button>
-                    <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold cursor-pointer hover:bg-emerald-100">
+                    <label className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-sky-200 bg-sky-50 text-sky-700 font-semibold cursor-pointer hover:bg-sky-100">
                       {uploadingCover ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      Upload manuel
+                      Import manuel
                       <input
                         type="file"
                         accept="image/*"
@@ -560,7 +601,7 @@ export default function EducatorEditGame() {
                       <img
                         key={previewCoverSrc}
                         src={previewCoverSrc || formData.coverImageUrl}
-                        alt="Aperçu cover"
+                        alt="Aperçu de la couverture"
                         className="w-full h-44 object-cover rounded-xl border border-gray-200"
                         onLoad={() => setCoverLoading(false)}
                         onError={() => setCoverLoading(false)}
@@ -572,20 +613,27 @@ export default function EducatorEditGame() {
 
               <section className="mb-8">
                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 pb-2 border-b border-gray-100">Visibilité</h2>
-                <label className="flex items-center gap-4 p-4 rounded-xl border-2 border-gray-100 hover:border-emerald-100 cursor-pointer transition-all bg-gray-50/30">
-                  <input type="checkbox" id="actif" checked={formData.actif} onChange={(e) => setFormData({ ...formData, actif: e.target.checked })}
-                    className="w-5 h-5 rounded-md border-gray-300 text-emerald-500 focus:ring-emerald-500 focus:ring-2" />
-                  <div>
-                    <span className="font-semibold text-gray-900">Jeu actif</span>
-                    <p className="text-sm text-gray-500 mt-0.5">Visible pour les joueurs une fois accepté</p>
+                {correctingDeactivatedGame ? (
+                  <div className="p-4 rounded-xl border-2 border-rose-100 bg-rose-50/50 text-sm text-rose-800">
+                    Ce jeu est désactivé par l'administration : sa réactivation se fait via le bouton
+                    « Finaliser et demander la réactivation » ci-dessus, pas depuis ce formulaire.
                   </div>
-                </label>
+                ) : (
+                  <label className="flex items-center gap-4 p-4 rounded-xl border-2 border-gray-100 hover:border-sky-100 cursor-pointer transition-all bg-gray-50/30">
+                    <input type="checkbox" id="actif" checked={formData.actif} onChange={(e) => setFormData({ ...formData, actif: e.target.checked })}
+                      className="w-5 h-5 rounded-md border-gray-300 text-sky-500 focus:ring-sky-500 focus:ring-2" />
+                    <div>
+                      <span className="font-semibold text-gray-900">Jeu actif</span>
+                      <p className="text-sm text-gray-500 mt-0.5">Visible pour les joueurs une fois accepté</p>
+                    </div>
+                  </label>
+                )}
               </section>
 
               <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-gray-100">
                 <motion.button whileHover={{ scale: submitting ? 1 : 1.02 }} whileTap={{ scale: submitting ? 1 : 0.98 }}
                   type="submit" disabled={submitting}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-70 disabled:pointer-events-none">
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-500 to-blue-600 text-white rounded-xl font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-70 disabled:pointer-events-none">
                   {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   {submitting ? 'Enregistrement...' : 'Enregistrer les modifications'}
                 </motion.button>
@@ -597,9 +645,9 @@ export default function EducatorEditGame() {
             </form>
             ) : (
               <div className="p-8">
-                <div className="mb-5 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
-                  <h2 className="text-lg font-bold text-emerald-900 mb-1">Contenu du jeu</h2>
-                  <p className="text-sm text-emerald-800">
+                <div className="mb-5 rounded-2xl border border-sky-100 bg-sky-50/60 p-5">
+                  <h2 className="text-lg font-bold text-sky-900 mb-1">Contenu du jeu</h2>
+                  <p className="text-sm text-sky-800">
                     Gérez le contenu pédagogique lié à ce jeu depuis cet onglet.
                   </p>
                 </div>
@@ -630,7 +678,7 @@ export default function EducatorEditGame() {
                             <button
                               type="button"
                               onClick={() => navigate(contentEditPath)}
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm font-semibold hover:bg-sky-100"
                             >
                               <FileText className="w-4 h-4" />
                               Ouvrir l'éditeur des questions
@@ -651,7 +699,7 @@ export default function EducatorEditGame() {
                             <button
                               type="button"
                               onClick={() => navigate(contentEditPath)}
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm font-semibold hover:bg-sky-100"
                             >
                               <FileText className="w-4 h-4" />
                               Ouvrir l'éditeur des paires
@@ -672,7 +720,7 @@ export default function EducatorEditGame() {
                             <button
                               type="button"
                               onClick={() => navigate(contentEditPath)}
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm font-semibold hover:bg-sky-100"
                             >
                               <FileText className="w-4 h-4" />
                               Ouvrir la configuration Réflexe
@@ -693,7 +741,7 @@ export default function EducatorEditGame() {
                             <button
                               type="button"
                               onClick={() => navigate(contentEditPath)}
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 text-sm font-semibold hover:bg-sky-100"
                             >
                               <FileText className="w-4 h-4" />
                               Ouvrir la configuration Logique

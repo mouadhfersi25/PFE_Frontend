@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import BodyClassSync from "./BodyClassSync";
 import AdminLayout from "../components/admin/AdminLayout";
+import ParentLayout from "../components/parent/ParentLayout";
 import PublicRoute from "./PublicRoute";
 import PrivateRoute from "./PrivateRoute";
 import AdminRoute from "./AdminRoute";
@@ -16,6 +17,7 @@ const ResetPassword = lazy(() => import("../pages/auth/ResetPassword/ResetPasswo
 const AdminEditMyProfile = lazy(() => import("../pages/admin/profile/AdminEditMyProfile"));
 const AdminDashboard = lazy(() => import("../pages/admin/dashboard/AdminDashboard"));
 const Players = lazy(() => import("../pages/admin/manage-users/Players"));
+const CreateStaffUser = lazy(() => import("../pages/admin/manage-users/CreateStaffUser"));
 const PlayerDetail = lazy(() => import("../pages/admin/manage-users/PlayerDetail"));
 const EditPlayer = lazy(() => import("../pages/admin/manage-users/EditPlayer"));
 const Games = lazy(() => import("../pages/admin/manage-games/Games"));
@@ -27,6 +29,7 @@ const AddBadge = lazy(() => import("../pages/admin/manage-badges/AddBadge"));
 const EditBadge = lazy(() => import("../pages/admin/manage-badges/EditBadge"));
 const Moderation = lazy(() => import("../pages/admin/moderation/Moderation"));
 const Statistics = lazy(() => import("../pages/admin/statistics/Statistics"));
+const AdminAdsStats = lazy(() => import("../pages/admin/ads/AdminAdsStats"));
 const EducatorDashboard = lazy(() => import("../pages/educator/dashboard/EducatorDashboard"));
 const AddQuestion = lazy(() => import("../pages/educator/questions/AddQuestion"));
 const EditQuestion = lazy(() => import("../pages/educator/questions/EditQuestion"));
@@ -63,6 +66,7 @@ const PlayerRewards = lazy(() => import("../pages/player/Rewards"));
 const PlayerProfile = lazy(() => import("../pages/player/Profile"));
 const PlayerRanking = lazy(() => import("../pages/player/Ranking"));
 const ParentDashboard = lazy(() => import("../pages/parent/ParentDashboard"));
+const AddChild = lazy(() => import("../pages/parent/AddChild"));
 const ChildProgress = lazy(() => import("../pages/parent/ChildProgress"));
 const ParentAnalytics = lazy(() => import("../pages/parent/Analytics"));
 const ParentBadges = lazy(() => import("../pages/parent/ParentBadges"));
@@ -95,6 +99,7 @@ function AppRoutes() {
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="players" element={<Players />} />
+          <Route path="players/create-staff" element={<CreateStaffUser />} />
           <Route path="players/:id" element={<PlayerDetail />} />
           <Route path="players/:id/edit" element={<EditPlayer />} />
           <Route path="games" element={<Games />} />
@@ -104,6 +109,7 @@ function AppRoutes() {
           <Route path="badges/:id/edit" element={<EditBadge />} />
           <Route path="moderation" element={<Moderation />} />
           <Route path="statistics" element={<Statistics />} />
+          <Route path="ads" element={<AdminAdsStats />} />
           <Route path="me/edit" element={<AdminEditMyProfile />} />
         </Route>
         <Route path="/educator/dashboard" element={<PrivateRoute><EducatorDashboard /></PrivateRoute>} />
@@ -143,13 +149,18 @@ function AppRoutes() {
         <Route path="/player/rewards" element={<PrivateRoute><PlayerRewards /></PrivateRoute>} />
         <Route path="/player/profile" element={<PrivateRoute><PlayerProfile /></PrivateRoute>} />
         <Route path="/player/ranking" element={<PrivateRoute><PlayerRanking /></PrivateRoute>} />
-        <Route path="/parent/dashboard" element={<PrivateRoute><ParentDashboard /></PrivateRoute>} />
-        <Route path="/parent/child-progress" element={<PrivateRoute><ChildProgress /></PrivateRoute>} />
-        <Route path="/parent/analytics" element={<PrivateRoute><ParentAnalytics /></PrivateRoute>} />
-        <Route path="/parent/badges" element={<PrivateRoute><ParentBadges /></PrivateRoute>} />
-        <Route path="/parent/history" element={<PrivateRoute><ParentHistory /></PrivateRoute>} />
+        <Route path="/parent" element={<PrivateRoute><ParentLayout /></PrivateRoute>}>
+          <Route index element={<Navigate to="/parent/dashboard" replace />} />
+          <Route path="dashboard" element={<ParentDashboard />} />
+          <Route path="add-child" element={<AddChild />} />
+          <Route path="child-progress" element={<ChildProgress />} />
+          <Route path="analytics" element={<ParentAnalytics />} />
+          <Route path="badges" element={<ParentBadges />} />
+          <Route path="history" element={<ParentHistory />} />
+        </Route>
         <Route path="/sponsor/dashboard" element={<SponsorRoute><SponsorDashboard /></SponsorRoute>} />
-        <Route path="/" element={<Home />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="/home" element={<Home />} />
       </Routes>
       </Suspense>
     </BrowserRouter>

@@ -4,5 +4,6 @@
 @import './variables.css';
 @import './minimal.css';
 @import './legacy-pages.css';
+@import './sponsor-dashboard.css';
 @import '../../styles/formAnimations.css';
 @import '../../styles/tailwind.css';

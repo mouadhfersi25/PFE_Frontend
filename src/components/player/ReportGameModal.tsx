@@ -107,10 +107,11 @@ export default function ReportGameModal({
 
         {(motif === 'AUTRE' || commentaire.length > 0) && (
           <div className="mb-4">
-            <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+            <label htmlFor="report-commentaire" className="block text-xs font-semibold text-slate-400 mb-1.5">
               {motif === 'AUTRE' ? 'Décrivez le problème (obligatoire)' : 'Commentaire (optionnel)'}
             </label>
             <textarea
+              id="report-commentaire"
               value={commentaire}
               onChange={(e) => setCommentaire(e.target.value)}
               rows={3}

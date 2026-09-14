@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import adminApi from '@/api/admin';
 import type { ReclamationDTO, MotifReclamation, StatutReclamation } from '@/api/types/api.types';
 import { getErrorMessage } from '@/utils/errorHandler';
+import AcceptReportModal, { type AcceptReportResult } from '@/components/admin/AcceptReportModal';
 
 const STATUT_LABELS: Record<StatutReclamation, string> = {
   OUVERT: 'En attente',
@@ -36,6 +37,7 @@ export default function Moderation() {
   const [filter, setFilter] = useState<FilterTab>('pending');
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [noteById, setNoteById] = useState<Record<number, string>>({});
+  const [acceptingReport, setAcceptingReport] = useState<ReclamationDTO | null>(null);
 
   const loadItems = useCallback(async () => {
     setLoading(true);
@@ -54,19 +56,44 @@ export default function Moderation() {
     void loadItems();
   }, [loadItems]);
 
-  const handleUpdate = async (item: ReclamationDTO, statut: 'TRAITE' | 'REJETE') => {
+  const handleReject = async (item: ReclamationDTO) => {
     setProcessingId(item.id);
     try {
       const note = (noteById[item.id] || '').trim();
-      const defaultMessage =
-        statut === 'REJETE'
-          ? 'Réclamation rejetée par l\'administration.'
-          : 'Réclamation traitée par l\'administration.';
       await adminApi.updateReclamation(item.id, {
-        statut,
-        reponseAdmin: note || defaultMessage,
+        statut: 'REJETE',
+        reponseAdmin: note || 'Réclamation rejetée par l\'administration.',
       });
-      toast.success(statut === 'REJETE' ? 'Réclamation rejetée' : 'Réclamation traitée');
+      toast.success('Réclamation rejetée');
+      await loadItems();
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Échec du traitement'));
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  /**
+   * L'admin accepte le signalement : la réclamation est marquée traitée (l'éducateur en sera
+   * notifié avec les détails), et si l'admin a choisi de désactiver le jeu depuis la popup,
+   * on enchaîne avec la désactivation (nouvelle notification dédiée pour l'éducateur).
+   */
+  const handleAcceptConfirm = async (result: AcceptReportResult) => {
+    const item = acceptingReport;
+    if (!item) return;
+    setProcessingId(item.id);
+    try {
+      await adminApi.updateReclamation(item.id, {
+        statut: 'TRAITE',
+        reponseAdmin: result.reponseAdmin,
+      });
+      if (result.deactivate) {
+        await adminApi.deactivateGame(item.gameId, result.deactivationReason);
+        toast.success('Signalement accepté — jeu désactivé, l\'éducateur a été notifié');
+      } else {
+        toast.success('Signalement accepté — l\'éducateur a été notifié');
+      }
+      setAcceptingReport(null);
       await loadItems();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Échec du traitement'));
@@ -212,7 +239,7 @@ export default function Moderation() {
                       onChange={(e) =>
                         setNoteById((prev) => ({ ...prev, [item.id]: e.target.value }))
                       }
-                      placeholder="Note admin (optionnelle)..."
+                      placeholder="Motif de rejet (optionnel)... — pour « Traiter », le détail se saisit dans la popup."
                       rows={2}
                       className="mt-3 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40"
                     />
@@ -231,7 +258,7 @@ export default function Moderation() {
                       <button
                         type="button"
                         disabled={processingId === item.id}
-                        onClick={() => void handleUpdate(item, 'TRAITE')}
+                        onClick={() => setAcceptingReport(item)}
                         className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 text-sm font-semibold"
                       >
                         {processingId === item.id ? (
@@ -244,7 +271,7 @@ export default function Moderation() {
                       <button
                         type="button"
                         disabled={processingId === item.id}
-                        onClick={() => void handleUpdate(item, 'REJETE')}
+                        onClick={() => void handleReject(item)}
                         className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white text-red-700 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 text-sm font-semibold"
                       >
                         Rejeter
@@ -257,6 +284,14 @@ export default function Moderation() {
           ))}
         </div>
       )}
+
+      <AcceptReportModal
+        open={acceptingReport != null}
+        report={acceptingReport}
+        submitting={acceptingReport != null && processingId === acceptingReport.id}
+        onClose={() => setAcceptingReport(null)}
+        onConfirm={handleAcceptConfirm}
+      />
     </div>
   );
 }

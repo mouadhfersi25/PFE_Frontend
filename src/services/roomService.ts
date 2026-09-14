@@ -1,6 +1,7 @@
 import { Client, type IMessage } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
 import userApi from '@/api/user/user.api';
+import storage from '@/utils/storage';
 import type {
   RealtimeRoomPlayerDTO,
   RealtimeRoomStateDTO,
@@ -20,6 +21,7 @@ export interface RoomPlayer {
 }
 
 export interface Room {
+  roomCode: string;
   gameId: string;
   players: RoomPlayer[];
   createdAt: number;
@@ -55,6 +57,7 @@ function mapPlayer(p: RealtimeRoomPlayerDTO): RoomPlayer {
 
 function mapRoom(dto: RealtimeRoomStateDTO): Room {
   return {
+    roomCode: dto.roomCode,
     gameId: String(dto.gameId),
     players: Array.isArray(dto.players) ? dto.players.map(mapPlayer) : [],
     createdAt: dto.createdAt,
@@ -103,6 +106,17 @@ export async function getRoom(code: string): Promise<Room | null> {
   }
 }
 
+/** Salles en ligne ouvertes (pas encore démarrées, pas encore pleines) que n'importe
+ * quel joueur connecté peut voir et rejoindre — optionnellement filtrées sur un jeu. */
+export async function listAvailableRooms(gameId?: string): Promise<Room[]> {
+  try {
+    const response = await userApi.listAvailableRooms(gameId ? Number(gameId) : undefined);
+    return Array.isArray(response.data) ? response.data.map(mapRoom) : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function joinRoom(
   code: string,
   _player: { id: string; name: string; avatar?: string; age?: number }
@@ -133,12 +147,65 @@ export async function setRoomStarted(code: string, _requesterId: string): Promis
   }
 }
 
+/** Quitte la salle — symétrique de joinRoom. Si l'hôte part, un autre membre est promu hôte. */
+export async function leaveRoom(code: string): Promise<boolean> {
+  if (!code) return false;
+  try {
+    await userApi.leaveRoom(code.toUpperCase());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Abandon en cours de partie : contrairement à leaveRoom, le joueur reste visible dans le
+ * classement final avec le statut "abandonné" au lieu de disparaître de la salle. */
+export async function forfeitRoom(code: string): Promise<boolean> {
+  if (!code) return false;
+  try {
+    await userApi.forfeitRoom(code.toUpperCase());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Variantes "beacon" de leaveRoom/forfeitRoom, à utiliser sur les événements de fermeture de
+ * page (`beforeunload`/`pagehide`) : navigator.sendBeacon envoie la requête de façon fiable
+ * même pendant que la page se décharge, contrairement à un appel axios classique qui serait
+ * annulé. En contrepartie, sendBeacon ne permet pas d'en-tête Authorization personnalisé — le
+ * jeton est donc passé en paramètre de requête (le backend l'accepte en repli, voir JwtFilter).
+ */
+function sendRoomBeacon(action: 'leave' | 'forfeit', code: string): void {
+  if (!code || typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') return;
+  const token = storage.get('jwt_token');
+  if (!token) return;
+  const apiBase = (ENV.API_URL || 'http://localhost:8081/api').replace(/\/+$/, '');
+  const url = `${apiBase}/users/rooms/${code.toUpperCase()}/${action}?token=${encodeURIComponent(token)}`;
+  try {
+    navigator.sendBeacon(url);
+  } catch {
+    // Best-effort uniquement : rien à faire si le navigateur refuse l'appel.
+  }
+}
+
+/** À utiliser avant le début de la partie (salle d'attente) : ferme l'onglet = quitte la salle. */
+export function leaveRoomBeacon(code: string): void {
+  sendRoomBeacon('leave', code);
+}
+
+/** À utiliser pendant une partie en cours : ferme l'onglet = abandon (forfait). */
+export function forfeitRoomBeacon(code: string): void {
+  sendRoomBeacon('forfeit', code);
+}
+
 export function subscribeRoom(
   roomCode: string,
   onRoomState: (room: Room) => void,
   onError?: (error: string) => void
 ): () => void {
-  const token = localStorage.getItem('jwt_token');
+  const token = storage.get('jwt_token');
   if (!token) {
     onError?.('Missing auth token');
     return () => {};
@@ -205,7 +272,7 @@ export function subscribeCompetitiveResult(
 ): () => void {
   let disposed = false;
   const normalizedRoomCode = roomCode.trim().toUpperCase();
-  const token = localStorage.getItem('jwt_token');
+  const token = storage.get('jwt_token');
   if (!token || !normalizedRoomCode) {
     onError?.('Missing room or auth token');
     return () => {};

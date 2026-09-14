@@ -118,8 +118,9 @@ export default function AddBadge() {
           <div className="h-1.5 w-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-500" />
           <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5" noValidate>
               <div>
-                <label className={labelClass}>Nom du badge <span className="text-rose-500">*</span></label>
+                <label htmlFor="badge-nom" className={labelClass}>Nom du badge <span className="text-rose-500">*</span></label>
                 <input
+                  id="badge-nom"
                   type="text"
                   value={formData.nom}
                   onChange={(e) => { setFormData({ ...formData, nom: e.target.value }); setErrors((prev) => ({ ...prev, nom: '' })); }}
@@ -134,8 +135,9 @@ export default function AddBadge() {
               </div>
 
               <div>
-                <label className={labelClass}>Description <span className="text-rose-500">*</span></label>
+                <label htmlFor="badge-description" className={labelClass}>Description <span className="text-rose-500">*</span></label>
                 <textarea
+                  id="badge-description"
                   value={formData.description}
                   onChange={(e) => { setFormData({ ...formData, description: e.target.value }); setErrors((prev) => ({ ...prev, description: '' })); }}
                   onBlur={() => {
@@ -154,8 +156,9 @@ export default function AddBadge() {
                   Condition de déblocage
                 </h3>
                 <div>
-                <label className={labelClass}>Condition de déblocage <span className="text-rose-500">*</span></label>
+                <label htmlFor="badge-typeCondition" className={labelClass}>Condition de déblocage <span className="text-rose-500">*</span></label>
                 <select
+                  id="badge-typeCondition"
                   value={formData.typeCondition}
                   onChange={(e) => {
                     setFormData({ ...formData, typeCondition: e.target.value as TypeConditionBadge | '', scoreCondition: '' });
@@ -176,10 +179,11 @@ export default function AddBadge() {
 
               {needsValue && (
                 <div>
-                  <label className={labelClass}>
+                  <label htmlFor="badge-scoreCondition" className={labelClass}>
                     Valeur {formData.typeCondition === 'SCORE_MIN' ? '(score min.)' : formData.typeCondition === 'GAMES_PLAYED' ? '(nombre de parties)' : '(nombre)'}
                   </label>
                   <input
+                    id="badge-scoreCondition"
                     type="number"
                     value={formData.scoreCondition}
                     onChange={(e) => {

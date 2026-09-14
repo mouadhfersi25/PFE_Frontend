@@ -3,9 +3,14 @@ import { motion } from 'motion/react';
 import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Target, Zap, Ban, Check } from 'lucide-react';
 import userApi from '@/api/user/user.api';
+import { forfeitRoom } from '@/services/roomService';
+import { useRoomBeaconOnUnload } from '@/hooks/useRoomBeaconOnUnload';
 import PlayerHeaderActions from '@/components/player/PlayerHeaderActions';
+import FullscreenToggleButton from '@/components/player/FullscreenToggleButton';
 import { exitFullscreenSafely } from '@/utils/fullscreen';
 import type { ReflexSettingsDTO } from '@/api/types';
+import InGameAdOverlay from '@/components/player/InGameAdOverlay';
+import { useInGameAd } from '@/hooks/useInGameAd';
 
 interface Reaction {
   time: number;
@@ -65,6 +70,7 @@ export default function ReflexGame() {
   const location = useLocation();
   const { gameId } = useParams();
   const { game, mode, roomCode } = location.state || {};
+  useRoomBeaconOnUnload(mode === 'Online', roomCode, 'forfeit');
 
   const [gameState, setGameState] = useState<'ready' | 'waiting' | 'active' | 'toosoon' | 'missed' | 'wrong'>('ready');
   const [round, setRound] = useState(0);
@@ -89,6 +95,12 @@ export default function ReflexGame() {
   const sessionStartMsRef = useRef<number>(Date.now());
 
   const totalRounds = settings?.nombreRounds ?? 10;
+  const [readyForResult, setReadyForResult] = useState(false);
+  const pendingResultRef = useRef<{ sessionData: Record<string, unknown> } | null>(null);
+  const { ad, visible: adVisible, ready: adReady, dismiss: dismissAd, openCta } = useInGameAd(
+    gameId,
+    readyForResult
+  );
   const maxReactionMs = settings?.tempsReactionMaxMs ?? 2000;
   const gameplayDifficulty = Math.max(0, Math.min(10, settings?.difficulte ?? 5));
   const reflexModel = (settings?.modeleReflexe ?? 'CLASSIC').toUpperCase();
@@ -129,27 +141,36 @@ export default function ReflexGame() {
       const score = Math.max(250 - avgReactionTime * 0.5, 50);
       const accuracy = Math.round((successfulReactions.length / totalRounds) * 100);
 
-      setTimeout(async () => {
-        await exitFullscreenSafely();
-        navigate('/player/game-result', {
-          state: {
-            game,
-            mode,
-            roomCode,
-            sessionData: {
-              scoreFinal: Math.round(score),
-              accuracy,
-              reactionTime: avgReactionTime,
-              durationSeconds,
-              reussite: accuracy >= 70,
-              totalRounds,
-              successfulRounds: successfulReactions.length,
-            },
+      setTimeout(() => {
+        pendingResultRef.current = {
+          sessionData: {
+            scoreFinal: Math.round(score),
+            accuracy,
+            reactionTime: avgReactionTime,
+            durationSeconds,
+            reussite: accuracy >= 70,
+            totalRounds,
+            successfulRounds: successfulReactions.length,
           },
-        });
+        };
+        // La pub sponsor (si dispo) s'affiche à ce moment précis, juste avant le résultat.
+        setReadyForResult(true);
       }, 2000);
     }
-  }, [isGameComplete, reactions, totalRounds, isFinishing, game, mode, navigate]);
+  }, [isGameComplete, reactions, totalRounds, isFinishing]);
+
+  // La navigation réelle n'a lieu qu'une fois la pub vue/fermée (cf. `adReady`).
+  useEffect(() => {
+    if (!readyForResult || !adReady || !pendingResultRef.current) return;
+    const pending = pendingResultRef.current;
+    pendingResultRef.current = null;
+    void (async () => {
+      await exitFullscreenSafely();
+      navigate('/player/game-result', {
+        state: { game, mode, roomCode, sessionData: pending.sessionData },
+      });
+    })();
+  }, [readyForResult, adReady, game, mode, roomCode, navigate]);
 
   const finalizeRound = (success: boolean, time: number, state: 'ready' | 'missed' | 'toosoon' | 'wrong' = 'ready') => {
     setReactions((prev) => [...prev, { time, success }]);
@@ -513,7 +534,7 @@ export default function ReflexGame() {
         }
         return { text: 'Temps écoulé ! Clique la cible plus vite.', color: 'text-orange-600', bg: 'bg-orange-50' };
       default:
-        return { text: 'Incorrect.', color: 'text-red-600', bg: 'bg-red-50' };
+        return { text: 'Mauvaise réponse.', color: 'text-red-600', bg: 'bg-red-50' };
     }
   };
 
@@ -527,7 +548,7 @@ export default function ReflexGame() {
         if (reflexModel === 'GO_NO_GO') {
           if (activeIsTrap) {
             return {
-              text: 'No-Go : ne cliquez pas (cible rouge STOP)',
+              text: 'Interdit : ne cliquez pas (cible rouge STOP)',
               color: 'text-red-700',
               bg: 'bg-red-100',
             };
@@ -562,6 +583,9 @@ export default function ReflexGame() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      {ad && adVisible ? (
+        <InGameAdOverlay ad={ad} onContinue={dismissAd} onCtaClick={openCta} />
+      ) : null}
       {/* Header */}
       <header className="bg-slate-950/75 backdrop-blur-xl border-b border-white/10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -571,7 +595,8 @@ export default function ReflexGame() {
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={() => {
-                  if (window.confirm('Are you sure you want to quit?')) {
+                  if (window.confirm('Es-tu sûr de vouloir quitter ?')) {
+                    if (mode === 'Online' && roomCode) void forfeitRoom(roomCode);
                     navigate('/player/dashboard');
                   }
                 }}
@@ -580,14 +605,14 @@ export default function ReflexGame() {
                 <ArrowLeft className="w-6 h-6 text-white" />
               </motion.button>
               <div>
-                <h1 className="text-xl font-bold text-white">{game?.title || 'Reflex Game'}</h1>
-                <p className="text-sm text-slate-300">Test your reaction speed</p>
+                <h1 className="text-xl font-bold text-white">{game?.title || 'Jeu de réflexe'}</h1>
+                <p className="text-sm text-slate-300">Teste ta vitesse de réaction</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="px-4 py-2 bg-white/10 rounded-lg border border-white/20">
                 <span className="font-bold text-fuchsia-300">
-                  Round: {round} / {totalRounds}
+                  Manche : {round} / {totalRounds}
                 </span>
               </div>
               {avgReactionTime > 0 && (
@@ -596,6 +621,7 @@ export default function ReflexGame() {
                   <span className="font-bold text-cyan-300">{avgReactionTime}ms</span>
                 </div>
               )}
+              <FullscreenToggleButton />
               <PlayerHeaderActions />
             </div>
           </div>
@@ -635,8 +661,8 @@ export default function ReflexGame() {
               </div>
               {gameState === 'ready' && round < totalRounds && (
                 <div className="text-slate-200 text-center">
-                  <p className="mb-2">Click anywhere to start round {round + 1}</p>
-                  <p className="text-sm">Wait for the target, then click it as fast as you can!</p>
+                  <p className="mb-2">Clique n'importe où pour démarrer la manche {round + 1}</p>
+                  <p className="text-sm">Attends la cible, puis clique dessus le plus vite possible !</p>
                 </div>
               )}
             </motion.div>
@@ -782,29 +808,29 @@ export default function ReflexGame() {
           animate={{ opacity: 1, y: 0 }}
           className="mt-8 bg-white/5 rounded-2xl p-6 border border-white/15 backdrop-blur-xl"
         >
-          <h3 className="text-lg font-bold text-white mb-4">Your Results</h3>
+          <h3 className="text-lg font-bold text-white mb-4">Tes résultats</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-green-500/15 rounded-xl border border-green-400/30">
-              <p className="text-sm text-slate-300 mb-1">Successful</p>
+              <p className="text-sm text-slate-300 mb-1">Réussis</p>
               <p className="text-2xl font-bold text-green-600">
                 {reactions.filter((r) => r.success).length}
               </p>
             </div>
             <div className="text-center p-4 bg-red-500/15 rounded-xl border border-red-400/30">
-              <p className="text-sm text-slate-300 mb-1">Missed</p>
+              <p className="text-sm text-slate-300 mb-1">Ratés</p>
               <p className="text-2xl font-bold text-red-600">
                 {reactions.filter((r) => !r.success).length}
               </p>
             </div>
             <div className="text-center p-4 bg-cyan-500/15 rounded-xl border border-cyan-400/30">
-              <p className="text-sm text-slate-300 mb-1">Avg Time</p>
+              <p className="text-sm text-slate-300 mb-1">Temps moyen</p>
               <p className="text-2xl font-bold text-blue-600">
                 {avgReactionTime || '—'}
                 {avgReactionTime > 0 && <span className="text-sm">ms</span>}
               </p>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-xl">
-              <p className="text-sm text-slate-300 mb-1">Best Time</p>
+              <p className="text-sm text-slate-300 mb-1">Meilleur temps</p>
               <p className="text-2xl font-bold text-purple-600">
                 {reactions.filter((r) => r.success).length > 0
                   ? Math.min(...reactions.filter((r) => r.success).map((r) => r.time))

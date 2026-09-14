@@ -18,21 +18,24 @@ export default function History() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
+    // Promise.allSettled (et non Promise.all) : un échec de l'historique oral ne doit
+    // jamais effacer les parties de jeu déjà récupérées avec succès, et inversement.
+    Promise.allSettled([
       userApi.getHistorySessions(),
       playerVoiceApi.getHistory(),
     ])
-      .then(([gamesRes, oralRes]) => {
-        if (!cancelled) {
-          setSessions(Array.isArray(gamesRes.data) ? gamesRes.data : []);
-          setOralSessions(Array.isArray(oralRes.data) ? oralRes.data : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSessions([]);
-          setOralSessions([]);
-        }
+      .then(([gamesResult, oralResult]) => {
+        if (cancelled) return;
+        setSessions(
+          gamesResult.status === 'fulfilled' && Array.isArray(gamesResult.value.data)
+            ? gamesResult.value.data
+            : []
+        );
+        setOralSessions(
+          oralResult.status === 'fulfilled' && Array.isArray(oralResult.value.data)
+            ? oralResult.value.data
+            : []
+        );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -67,6 +70,31 @@ export default function History() {
     return `${mins}m ${secs.toString().padStart(2, '0')}s`;
   };
 
+  const formatGameTypeLabel = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'quiz':
+        return 'Quiz';
+      case 'memory':
+      case 'memoire':
+        return 'Mémoire';
+      case 'logic':
+      case 'logique':
+        return 'Logique';
+      case 'reflex':
+      case 'reflexe':
+        return 'Réflexe';
+      default:
+        return type;
+    }
+  };
+
+  const formatModeLabel = (mode?: string | null) => {
+    const value = (mode || '').toLowerCase();
+    if (value === 'individual' || value === 'individuel') return 'Solo';
+    if (value === 'online' || value === 'en_ligne' || value === 'en ligne') return 'Multijoueur';
+    return mode || '—';
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 relative overflow-x-hidden">
       <div className="pointer-events-none absolute -top-20 -left-20 w-72 h-72 rounded-full bg-fuchsia-600/30 blur-3xl" />
@@ -84,8 +112,8 @@ export default function History() {
               <ArrowLeft className="w-6 h-6 text-white" />
             </motion.button>
             <div>
-              <h1 className="text-2xl font-bold text-white">Session History</h1>
-              <p className="text-sm text-slate-300">View your past games</p>
+              <h1 className="text-2xl font-bold text-white">Historique des sessions</h1>
+              <p className="text-sm text-slate-300">Consulte tes parties passées</p>
             </div>
           </div>
           <PlayerHeaderActions />
@@ -112,7 +140,7 @@ export default function History() {
               <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
                 <Target className="w-5 h-5 text-blue-600" />
               </div>
-              <p className="text-sm text-slate-300">Total Games</p>
+              <p className="text-sm text-slate-300">Parties totales</p>
             </div>
             <p className="text-3xl font-bold text-white">{sessions.length}</p>
           </motion.div>
@@ -127,7 +155,7 @@ export default function History() {
               <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
                 <Clock className="w-5 h-5 text-purple-600" />
               </div>
-              <p className="text-sm text-slate-300">Avg Score</p>
+              <p className="text-sm text-slate-300">Score moyen</p>
             </div>
             <p className="text-3xl font-bold text-white">
               {avgScore}
@@ -147,13 +175,13 @@ export default function History() {
               <thead className="bg-white/5 border-b border-white/10">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                    Game
+                    Jeu
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
                     Date
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                    Duration
+                    Durée
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
                     Score
@@ -162,7 +190,7 @@ export default function History() {
                     Mode
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                    Accuracy
+                    Précision
                   </th>
                 </tr>
               </thead>
@@ -180,7 +208,7 @@ export default function History() {
                         <span className="text-2xl">{getGameTypeIcon(session.gameType)}</span>
                         <div>
                           <p className="font-semibold text-white">{session.gameTitle}</p>
-                          <p className="text-sm text-slate-300">{session.gameType}</p>
+                          <p className="text-sm text-slate-300">{formatGameTypeLabel(session.gameType)}</p>
                         </div>
                       </div>
                     </td>
@@ -208,7 +236,7 @@ export default function History() {
                         ) : (
                           <Users className="w-4 h-4 text-slate-300" />
                         )}
-                        <span className="text-sm text-slate-200">{session.mode}</span>
+                        <span className="text-sm text-slate-200">{formatModeLabel(session.mode)}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -248,10 +276,10 @@ export default function History() {
           >
             <span className="text-6xl mb-4 block">📊</span>
             <h3 className="text-2xl font-bold text-white mb-2">
-              {loading ? 'Chargement de l’historique...' : 'No games played yet'}
+              {loading ? 'Chargement de l’historique...' : 'Aucune partie jouée'}
             </h3>
             <p className="text-slate-300 mb-6">
-              {loading ? 'Veuillez patienter.' : 'Start playing games to see your history here'}
+              {loading ? 'Veuillez patienter.' : 'Commence à jouer pour voir ton historique ici'}
             </p>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -259,7 +287,7 @@ export default function History() {
               onClick={() => navigate('/player/new-game')}
               className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold"
             >
-              Play Your First Game
+              Jouer ta première partie
             </motion.button>
           </motion.div>
         )}

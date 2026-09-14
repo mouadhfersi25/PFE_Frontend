@@ -8,7 +8,12 @@ function App() {
     <EduGameAuthBridge>
       <AdminDataProvider>
         <AppRoutes />
-        <Toaster position="top-right" richColors />
+        {/*
+          top-center plutôt que top-right : sur tous les dashboards (Admin/Éducateur/Joueur/Sponsor),
+          l'avatar + menu déconnexion est en haut à droite — un toast "top-right" passait dessus et
+          empêchait de cliquer dessus tant qu'il était affiché.
+        */}
+        <Toaster position="top-center" richColors />
       </AdminDataProvider>
     </EduGameAuthBridge>
   );

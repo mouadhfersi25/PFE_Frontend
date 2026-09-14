@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Play, Clock, Users, User as UserIcon, Filter, LogIn } from 'lucide-react';
+import { ArrowLeft, Play, Clock, Users, User as UserIcon, Filter, LogIn, RefreshCw, DoorOpen, X, Loader2, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/context';
 import PlayerHeaderActions from '@/components/player/PlayerHeaderActions';
-import { joinRoom, getRoom, MAX_ROOM_PLAYERS } from '@/services/roomService';
+import { joinRoom, getRoom, listAvailableRooms, MAX_ROOM_PLAYERS, type Room } from '@/services/roomService';
 import type { Game } from '@/data/types';
 import userApi from '@/api/user/user.api';
 import type { GameDTO } from '@/api/types';
@@ -25,6 +25,16 @@ export default function NewGame() {
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [games, setGames] = useState<Game[]>([]);
+  const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [joiningRoomCode, setJoiningRoomCode] = useState<string | null>(null);
+  // Avant de créer une salle pour un jeu en ligne, on vérifie s'il en existe déjà une
+  // ouverte pour ce même jeu, afin de proposer de la rejoindre plutôt que d'en recréer
+  // une nouvelle (sinon deux joueurs qui cliquent "Jouer" au même moment se retrouvent
+  // chacun seul dans sa propre salle, sans jamais se voir).
+  const [checkingRoomsForGameId, setCheckingRoomsForGameId] = useState<string | null>(null);
+  const [roomChoice, setRoomChoice] = useState<{ game: Game; rooms: Room[] } | null>(null);
+  const [creatingRoom, setCreatingRoom] = useState(false);
 
   const mapType = (typeJeu: GameDTO['typeJeu']): Game['type'] => {
     if (typeJeu === 'QUIZ') return 'quiz';
@@ -33,11 +43,10 @@ export default function NewGame() {
     return 'reflex';
   };
 
-  const mapDifficulty = (difficulte: number | null | undefined): Game['difficulty'] => {
-    const d = difficulte ?? 5;
-    if (d <= 3) return 'Easy';
-    if (d <= 6) return 'Medium';
-    return 'Hard';
+  const mapDifficulty = (difficulte: GameDTO['difficulte']): Game['difficulty'] => {
+    if (difficulte === 'FACILE') return 'Easy';
+    if (difficulte === 'DIFFICILE') return 'Hard';
+    return 'Medium';
   };
 
   const toPlayerGame = (g: GameDTO): Game => ({
@@ -50,9 +59,8 @@ export default function NewGame() {
     difficulty: mapDifficulty(g.difficulte),
     estimatedTime: `${g.dureeMinutes ?? 10} min`,
     durationMinutes: g.dureeMinutes ?? 10,
-    quizPlayMode: g.quizPlayMode ?? 'CLASSIC',
     quizVariant: g.quizVariant ?? 'DEFAULT',
-    icon: g.icone || (g.typeJeu === 'QUIZ' ? '🧮' : g.typeJeu === 'MEMOIRE' ? '🧠' : g.typeJeu === 'LOGIQUE' ? '🎯' : '⚡'),
+    icon: g.typeJeu === 'QUIZ' ? '🧮' : g.typeJeu === 'MEMOIRE' ? '🧠' : g.typeJeu === 'LOGIQUE' ? '🎯' : '⚡',
     coverImageUrl: g.coverImageUrl || undefined,
     active: g.actif,
   });
@@ -73,6 +81,22 @@ export default function NewGame() {
         if (!cancelled) setGames([]);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  // Salles en ligne ouvertes que d'autres joueurs viennent de créer : visibles par tous les
+  // joueurs connectés dès leur arrivée sur cette page, quel que soit l'onglet Solo/En ligne
+  // sélectionné — sinon un joueur resté sur "Solo" ne voit jamais les salles déjà ouvertes.
+  const refreshAvailableRooms = () => {
+    setLoadingRooms(true);
+    listAvailableRooms()
+      .then(setAvailableRooms)
+      .finally(() => setLoadingRooms(false));
+  };
+
+  useEffect(() => {
+    refreshAvailableRooms();
+    const interval = setInterval(refreshAvailableRooms, 4000);
+    return () => clearInterval(interval);
   }, []);
 
   const currentPlayer = playerProfile
@@ -107,41 +131,49 @@ export default function NewGame() {
     }
   };
 
-  const handleJoinRoom = async () => {
+  const joinRoomByCode = async (rawCode: string) => {
     setJoinError('');
-    const code = joinCode.trim().toUpperCase();
+    const code = rawCode.trim().toUpperCase();
     if (!code || code.length < 4) {
       setJoinError('Code invalide (min. 4 caractères)');
       return;
     }
-    const room = await getRoom(code);
-    if (!room) {
-      setJoinError('Aucune room avec ce code');
-      return;
+    setJoiningRoomCode(code);
+    try {
+      const room = await getRoom(code);
+      if (!room) {
+        setJoinError('Aucune salle avec ce code');
+        return;
+      }
+      const alreadyInRoom = room.players.some((p) => p.id === currentPlayer.id);
+      if (!alreadyInRoom && room.players.length >= MAX_ROOM_PLAYERS) {
+        setJoinError(`Salle complète (${MAX_ROOM_PLAYERS}/${MAX_ROOM_PLAYERS})`);
+        return;
+      }
+      const joinedRoom = await joinRoom(code, currentPlayer);
+      if (!joinedRoom) {
+        setJoinError(`Impossible de rejoindre la salle (${MAX_ROOM_PLAYERS} joueurs max)`);
+        return;
+      }
+      const game = games.find((g) => g.id === room.gameId);
+      if (!game) {
+        setJoinError('Jeu introuvable');
+        return;
+      }
+      if (!isGameAllowedForPlayerAge(game)) {
+        setJoinError(`Tu ne peux pas rejoindre ce jeu: tranche d'age ${game.ageRange} ans.`);
+        return;
+      }
+      navigate(`/player/waiting-room/${room.gameId}?room=${code}`, {
+        state: { game, mode: 'Online' as const, roomCode: code },
+      });
+    } finally {
+      setJoiningRoomCode(null);
     }
-    const alreadyInRoom = room.players.some((p) => p.id === currentPlayer.id);
-    if (!alreadyInRoom && room.players.length >= MAX_ROOM_PLAYERS) {
-      setJoinError(`Room complète (${MAX_ROOM_PLAYERS}/${MAX_ROOM_PLAYERS})`);
-      return;
-    }
-    const joinedRoom = await joinRoom(code, currentPlayer);
-    if (!joinedRoom) {
-      setJoinError(`Impossible de rejoindre la room (${MAX_ROOM_PLAYERS} joueurs max)`);
-      return;
-    }
-    const game = games.find((g) => g.id === room.gameId);
-    if (!game) {
-      setJoinError('Jeu introuvable');
-      return;
-    }
-    if (!isGameAllowedForPlayerAge(game)) {
-      setJoinError(`Tu ne peux pas rejoindre ce jeu: tranche d'age ${game.ageRange} ans.`);
-      return;
-    }
-    navigate(`/player/waiting-room/${room.gameId}?room=${code}`, {
-      state: { game, mode: 'Online' as const, roomCode: code },
-    });
   };
+
+  const handleJoinRoom = () => joinRoomByCode(joinCode);
+  const handleJoinAvailableRoom = (room: Room) => joinRoomByCode(room.roomCode);
 
   const filteredGames = games.filter((game) => {
     if (selectedMode === 'Online' && game.modeJeu !== 'EN_LIGNE') return false;
@@ -156,8 +188,9 @@ export default function NewGame() {
     return true;
   });
 
-  const handlePlayGame = (game: Game) => {
-    if (!isGameAllowedForPlayerAge(game)) return;
+  const startNewRoomForGame = (game: Game) => {
+    setRoomChoice(null);
+    setCreatingRoom(true);
     void launchPlayerGame({
       gameId: game.id,
       gameTypeRoute: game.type,
@@ -166,13 +199,58 @@ export default function NewGame() {
       navigate,
       enterFullscreen,
       player: currentPlayer,
-    });
+    }).finally(() => setCreatingRoom(false));
+  };
+
+  const handlePlayGame = async (game: Game) => {
+    if (!isGameAllowedForPlayerAge(game)) return;
+
+    if (game.modeJeu !== 'EN_LIGNE') {
+      void launchPlayerGame({
+        gameId: game.id,
+        gameTypeRoute: game.type,
+        modeJeu: game.modeJeu,
+        gamePayload: game,
+        navigate,
+        enterFullscreen,
+        player: currentPlayer,
+      });
+      return;
+    }
+
+    // Jeu en ligne : on vérifie d'abord s'il existe déjà une salle ouverte pour ce
+    // jeu avant d'en créer une nouvelle, pour éviter que deux joueurs se retrouvent
+    // chacun dans leur propre salle sans jamais se rencontrer.
+    setCheckingRoomsForGameId(game.id);
+    try {
+      const rooms = await listAvailableRooms(game.id);
+      if (rooms.length > 0) {
+        setRoomChoice({ game, rooms });
+      } else {
+        startNewRoomForGame(game);
+      }
+    } finally {
+      setCheckingRoomsForGameId(null);
+    }
   };
 
   const difficultyColors = {
     Easy: 'bg-green-100 text-green-700 border-green-300',
     Medium: 'bg-yellow-100 text-yellow-700 border-yellow-300',
     Hard: 'bg-red-100 text-red-700 border-red-300',
+  };
+
+  const difficultyLabel = (difficulty: Game['difficulty']) => {
+    if (difficulty === 'Easy') return 'Facile';
+    if (difficulty === 'Medium') return 'Moyen';
+    return 'Difficile';
+  };
+
+  const typeLabel = (type: Game['type']) => {
+    if (type === 'quiz') return 'Quiz';
+    if (type === 'memory') return 'Mémoire';
+    if (type === 'logic') return 'Logique';
+    return 'Réflexe';
   };
 
   return (
@@ -209,13 +287,13 @@ export default function NewGame() {
           <div className="absolute -right-16 -top-16 w-56 h-56 rounded-full bg-white/10 blur-2xl" />
           <div className="relative z-10 flex items-center justify-between gap-4">
             <div>
-              <p className="uppercase text-xs tracking-widest text-white/75 mb-1">Experience Hub</p>
+              <p className="uppercase text-xs tracking-widest text-white/75 mb-1">Espace de jeu</p>
               <h2 className="text-xl md:text-2xl font-extrabold mb-1">Choisis ton prochain défi</h2>
               <p className="text-white/90 text-xs md:text-sm">Sélectionne un jeu adapté à ton profil et maximise ta progression.</p>
             </div>
             <div className="hidden md:flex items-center gap-3">
               <div className="px-3 py-1.5 rounded-lg bg-white/15 border border-white/25 text-xs font-semibold">
-                Mode: {selectedMode === 'Individual' ? 'Solo' : 'Solo en ligne'}
+                Mode: {selectedMode === 'Individual' ? 'Solo' : 'Multijoueur'}
               </div>
               <div className="px-3 py-1.5 rounded-lg bg-white/15 border border-white/25 text-xs font-semibold">
                 Jeux: {filteredGames.length}
@@ -223,6 +301,73 @@ export default function NewGame() {
             </div>
           </div>
         </motion.div>
+
+        {/* Salles en ligne ouvertes créées par d'autres joueurs : toujours visibles, quel que
+            soit l'onglet Solo/En ligne sélectionné, pour qu'un joueur connecté ne les manque
+            jamais et puisse les rejoindre directement, sans code. */}
+        {availableRooms.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/5 border border-white/15 rounded-2xl p-5 mb-6 backdrop-blur-xl"
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-bold text-white flex items-center gap-2">
+                <DoorOpen className="w-4 h-4 text-violet-400" />
+                Salles disponibles
+                {availableRooms.length > 0 && (
+                  <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold text-violet-200">
+                    {availableRooms.length}
+                  </span>
+                )}
+              </h3>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={refreshAvailableRooms}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-slate-200 text-xs font-medium hover:bg-white/20 transition-colors"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingRooms ? 'animate-spin' : ''}`} />
+                Actualiser
+              </motion.button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {availableRooms.map((room) => {
+                  const game = games.find((g) => g.id === room.gameId);
+                  const host = room.players.find((p) => p.isHost);
+                  const ageAllowed = game ? isGameAllowedForPlayerAge(game) : false;
+                  return (
+                    <div
+                      key={room.roomCode}
+                      className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 p-3"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/10 text-xl">
+                        {game?.icon ?? '🎮'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{game?.title ?? 'Jeu'}</p>
+                        <p className="truncate text-xs text-slate-400">
+                          Hôte : {host?.name ?? '—'} · {room.players.length}/{MAX_ROOM_PLAYERS}
+                        </p>
+                      </div>
+                      <motion.button
+                        whileHover={ageAllowed ? { scale: 1.05 } : undefined}
+                        whileTap={ageAllowed ? { scale: 0.95 } : undefined}
+                        onClick={() => handleJoinAvailableRoom(room)}
+                        disabled={!game || !ageAllowed || joiningRoomCode === room.roomCode}
+                        title={!ageAllowed ? "Tranche d'âge non compatible" : undefined}
+                        className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400"
+                      >
+                        {joiningRoomCode === room.roomCode ? '...' : 'Rejoindre'}
+                      </motion.button>
+                    </div>
+                  );
+                })}
+            </div>
+          </motion.div>
+        )}
+
         {/* Mode en ligne : adversaires jouant chacun en solo */}
         {selectedMode === 'Online' && (
           <motion.div
@@ -232,19 +377,19 @@ export default function NewGame() {
           >
             <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
               <Users className="w-5 h-5 text-violet-600" />
-              Solo en ligne compétitif
+              Multijoueur compétitif
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-white/5 rounded-xl p-4 border border-white/15">
-                <h3 className="font-bold text-white mb-2">Créer une room</h3>
+                <h3 className="font-bold text-white mb-2">Créer une salle</h3>
                 <p className="text-sm text-slate-300 mb-4">
-                  Choisis un jeu puis clique sur <strong>Play</strong>. Une room sera créée avec un <strong>code</strong> à partager avec tes adversaires. Chacun joue seul et le meilleur score gagne.
+                  Choisis un jeu puis clique sur <strong>Jouer</strong>. Une salle sera créée avec un <strong>code</strong> à partager avec tes adversaires. Chacun joue seul et le meilleur score gagne.
                 </p>
-                <p className="text-xs text-violet-600 font-medium">↓ Choisis un jeu plus bas puis clique sur Play</p>
+                <p className="text-xs text-violet-600 font-medium">↓ Choisis un jeu plus bas puis clique sur Jouer</p>
               </div>
               <div className="bg-white/5 rounded-xl p-4 border border-white/15">
-                <h3 className="font-bold text-white mb-2">Rejoindre une room</h3>
-                <p className="text-sm text-slate-300 mb-3">Tu as reçu un code ? Saisis-le ici pour rejoindre la room.</p>
+                <h3 className="font-bold text-white mb-2">Rejoindre une salle</h3>
+                <p className="text-sm text-slate-300 mb-3">Tu as reçu un code ? Saisis-le ici pour rejoindre la salle.</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -284,48 +429,51 @@ export default function NewGame() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* Age Filter */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Tranche d'age</label>
+              <label htmlFor="filter-age" className="block text-xs font-medium text-slate-300 mb-1.5">Tranche d'age</label>
               <select
+                id="filter-age"
                 value={selectedAge}
                 onChange={(e) => setSelectedAge(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
               >
-                <option className="bg-white text-slate-900" value="all">All Ages</option>
-                <option className="bg-white text-slate-900" value="7">7-9 years</option>
-                <option className="bg-white text-slate-900" value="10">10-12 years</option>
-                <option className="bg-white text-slate-900" value="13">13-15 years</option>
-                <option className="bg-white text-slate-900" value="16">16-18 years</option>
+                <option className="bg-white text-slate-900" value="all">Tous les âges</option>
+                <option className="bg-white text-slate-900" value="7">7-9 ans</option>
+                <option className="bg-white text-slate-900" value="10">10-12 ans</option>
+                <option className="bg-white text-slate-900" value="13">13-15 ans</option>
+                <option className="bg-white text-slate-900" value="16">16-18 ans</option>
               </select>
             </div>
 
             {/* Difficulty Filter */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Difficulté</label>
+              <label htmlFor="filter-difficulty" className="block text-xs font-medium text-slate-300 mb-1.5">Difficulté</label>
               <select
+                id="filter-difficulty"
                 value={selectedDifficulty}
                 onChange={(e) => setSelectedDifficulty(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
               >
-                <option className="bg-white text-slate-900" value="all">All Levels</option>
-                <option className="bg-white text-slate-900" value="Easy">Easy</option>
-                <option className="bg-white text-slate-900" value="Medium">Medium</option>
-                <option className="bg-white text-slate-900" value="Hard">Hard</option>
+                <option className="bg-white text-slate-900" value="all">Tous les niveaux</option>
+                <option className="bg-white text-slate-900" value="Easy">Facile</option>
+                <option className="bg-white text-slate-900" value="Medium">Moyen</option>
+                <option className="bg-white text-slate-900" value="Hard">Difficile</option>
               </select>
             </div>
 
             {/* Game Type Filter */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Type de jeu</label>
+              <label htmlFor="filter-type" className="block text-xs font-medium text-slate-300 mb-1.5">Type de jeu</label>
               <select
+                id="filter-type"
                 value={selectedType}
                 onChange={(e) => setSelectedType(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-white/20 bg-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
               >
-                <option className="bg-white text-slate-900" value="all">All Types</option>
+                <option className="bg-white text-slate-900" value="all">Tous les types</option>
                 <option className="bg-white text-slate-900" value="quiz">Quiz</option>
-                <option className="bg-white text-slate-900" value="memory">Memory</option>
-                <option className="bg-white text-slate-900" value="logic">Logic</option>
-                <option className="bg-white text-slate-900" value="reflex">Reflex</option>
+                <option className="bg-white text-slate-900" value="memory">Mémoire</option>
+                <option className="bg-white text-slate-900" value="logic">Logique</option>
+                <option className="bg-white text-slate-900" value="reflex">Réflexe</option>
               </select>
             </div>
 
@@ -357,7 +505,7 @@ export default function NewGame() {
                   }`}
                 >
                   <Users className="w-4 h-4 inline mr-1" />
-                  Solo en ligne
+                  Multijoueur
                 </motion.button>
               </div>
             </div>
@@ -390,7 +538,7 @@ export default function NewGame() {
                 {game.coverImageUrl ? (
                   <img
                     src={game.coverImageUrl}
-                    alt={`Cover ${game.title}`}
+                    alt={`Couverture ${game.title}`}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 ) : (
@@ -400,7 +548,7 @@ export default function NewGame() {
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
                 <div className="absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-1 rounded-full bg-black/35 border border-white/30 text-[10px] text-white font-semibold uppercase tracking-wide">
-                  {game.type}
+                  {typeLabel(game.type)}
                 </div>
                 <div className="absolute top-3 right-3 w-8 h-8 rounded-lg bg-black/35 border border-white/30 flex items-center justify-center text-lg">
                   {game.icon}
@@ -410,7 +558,7 @@ export default function NewGame() {
                 <div className="flex items-start justify-between mb-3">
                 <h3 className="text-lg font-bold text-white flex-1 line-clamp-2">{game.title}</h3>
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${difficultyColors[game.difficulty]}`}>
-                    {game.difficulty}
+                    {difficultyLabel(game.difficulty)}
                   </span>
                 </div>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -419,7 +567,7 @@ export default function NewGame() {
                       ? 'bg-violet-500/20 text-violet-200 border-violet-300/40'
                       : 'bg-cyan-500/20 text-cyan-200 border-cyan-300/40'
                   }`}>
-                    Mode: {game.modeJeu === 'EN_LIGNE' ? 'Solo en ligne · contre adversaires' : 'Solo'}
+                    Mode: {game.modeJeu === 'EN_LIGNE' ? 'Multijoueur · contre adversaires' : 'Solo'}
                   </span>
                   {game.type === 'quiz' && (
                     <PlayerQuizVariantChip variant={game.quizVariant ?? 'DEFAULT'} />
@@ -429,7 +577,7 @@ export default function NewGame() {
                 <div className="flex items-center gap-3 text-xs text-slate-300 mb-3">
                   <div className="flex items-center gap-1">
                     <UserIcon className="w-4 h-4" />
-                    <span>{game.ageRange} years</span>
+                    <span>{game.ageRange} ans</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <Clock className="w-4 h-4" />
@@ -440,15 +588,23 @@ export default function NewGame() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handlePlayGame(game)}
-                  disabled={!ageAllowed}
+                  disabled={!ageAllowed || checkingRoomsForGameId === game.id}
                   className={`w-full py-2.5 rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors ${
                     ageAllowed
-                      ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-500'
+                      ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 disabled:opacity-70'
                       : 'bg-white/15 text-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  <Play className="w-5 h-5" />
-                  {ageAllowed ? 'Play Now' : 'Tranche d\'age non compatible'}
+                  {checkingRoomsForGameId === game.id ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Play className="w-5 h-5" />
+                  )}
+                  {!ageAllowed
+                    ? "Tranche d'age non compatible"
+                    : checkingRoomsForGameId === game.id
+                      ? 'Vérification des salles...'
+                      : 'Jouer'}
                 </motion.button>
                 {!ageAllowed && (
                   <p className="mt-2 text-xs text-rose-600">
@@ -485,6 +641,78 @@ export default function NewGame() {
           </motion.div>
         )}
       </div>
+
+      {/* Choix entre rejoindre une salle déjà ouverte pour ce jeu, ou en créer une nouvelle */}
+      {roomChoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            className="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900 p-6 shadow-2xl"
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-white">Une salle est déjà ouverte</h3>
+                <p className="mt-1 text-sm text-slate-300">
+                  {roomChoice.rooms.length > 1
+                    ? `${roomChoice.rooms.length} salles existent déjà pour « ${roomChoice.game.title} ». Rejoins-en une ou crée la tienne.`
+                    : `Un autre joueur attend déjà pour « ${roomChoice.game.title} ». Rejoins sa salle ou crée la tienne.`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoomChoice(null)}
+                className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 max-h-56 space-y-2 overflow-y-auto">
+              {roomChoice.rooms.map((room) => {
+                const host = room.players.find((p) => p.isHost);
+                return (
+                  <div
+                    key={room.roomCode}
+                    className="flex items-center gap-3 rounded-xl border border-white/15 bg-white/5 p-3"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-lg">
+                      {host?.avatar ?? '👤'}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-white">{host?.name ?? 'Hôte'}</p>
+                      <p className="text-xs text-slate-400">{room.players.length}/{MAX_ROOM_PLAYERS} joueurs</p>
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => {
+                        setRoomChoice(null);
+                        void handleJoinAvailableRoom(room);
+                      }}
+                      disabled={joiningRoomCode === room.roomCode}
+                      className="shrink-0 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-violet-500 disabled:opacity-60"
+                    >
+                      Rejoindre
+                    </motion.button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => startNewRoomForGame(roomChoice.game)}
+              disabled={creatingRoom}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/5 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10 disabled:opacity-60"
+            >
+              {creatingRoom ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
+              Créer une nouvelle salle à la place
+            </motion.button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
