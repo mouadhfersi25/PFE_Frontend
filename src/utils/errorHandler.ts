@@ -1,3 +1,5 @@
+import { ENV } from "@/config/env";
+
 /**
  * Fonction utilitaire pour extraire le message d'erreur depuis une erreur Axios
  */
@@ -27,9 +29,9 @@ export function getErrorMessage(
   if (e?.request) {
     const msg = (e.message || "").toLowerCase();
     if (msg.includes("timeout") || (e as { code?: string }).code === "ECONNABORTED") {
-      return "Le serveur met trop de temps à répondre. Vérifiez que le backend tourne sur le port 8081.";
+      return "Le serveur met trop de temps à répondre. Réessayez dans un instant.";
     }
-    return "Impossible de contacter le serveur (http://localhost:8081). Démarrez le backend puis réessayez.";
+    return `Impossible de contacter le serveur (${ENV.API_URL}). Réessayez dans un instant.`;
   }
 
   return e?.message || defaultMessage;

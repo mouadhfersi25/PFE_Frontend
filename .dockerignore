@@ -7,6 +7,11 @@ coverage
 *.md
 .env
 .env.*
+# .env.production ne contient pas de secret (juste l'URL publique de l'API) et
+# doit etre present au build Docker pour que Vite l'utilise -- sans ca, le
+# build de prod retombe silencieusement sur .env (localhost:8081, pense pour
+# le dev local uniquement).
+!.env.production
 Jenkinsfile
 k8s
 scripts
