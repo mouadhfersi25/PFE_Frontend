@@ -13,9 +13,6 @@ pipeline {
 
     environment {
         IMAGE = 'mouadhfersi/edugame-frontend'
-        CONTAINER_NAME = 'edugame-frontend'
-        // Port hote Jenkins -> port 80 nginx dans le conteneur
-        APP_PORT = '3000'
     }
 
     stages {
@@ -111,31 +108,11 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
-            environment {
-                TAG = "${env.BUILD_NUMBER}"
-            }
-            steps {
-                sh '''
-                    set -eu
-                    echo "Deploiement Docker de $IMAGE:$TAG"
-
-                    docker pull "$IMAGE:$TAG"
-
-                    docker stop "$CONTAINER_NAME" 2>/dev/null || true
-                    docker rm "$CONTAINER_NAME" 2>/dev/null || true
-
-                    docker run -d \
-                      --name "$CONTAINER_NAME" \
-                      --restart unless-stopped \
-                      -p "${APP_PORT}:80" \
-                      "$IMAGE:$TAG"
-
-                    echo "Conteneur demarre : $CONTAINER_NAME ($IMAGE:$TAG) sur le port $APP_PORT"
-                    docker ps --filter "name=$CONTAINER_NAME"
-                '''
-            }
-        }
+        // Pas de stage Deploy Docker ici : l'image publiee ci-dessus est tiree par le
+        // Deployment k3s "edugame-frontend" (imagePullPolicy: Always), redemarre
+        // manuellement avec "kubectl rollout restart" apres chaque build. L'ancien
+        // stage Deploy lancait un second conteneur Docker local jamais utilise en
+        // production -- supprime.
     }
 
     post {
